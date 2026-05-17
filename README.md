@@ -1,8 +1,8 @@
 # Fallback
 
-Fallback keeps GitHub work, local changes, and branch state coherent when repo work gets messy.
+Fallback keeps the GitHub context your repo work depends on available locally, even when GitHub is down or you have no internet.
 
-Git is distributed. GitHub context, review work, operation history, and branch safety evidence usually are not. Fallback keeps PRs, issues, reviews, comments, checks, local Git state, and recovery context available locally so you can keep working when GitHub, the network, or a branch history cannot be trusted to stay clean and current.
+Git already gives you the code. Fallback gives the rest of the working context a local home: PRs, issues, reviews, comments, checks, operation history, local Git state, and recovery evidence. When GitHub is slow, unreachable, rate limited, or a branch history gets messy, you still have the context you need to understand what happened and keep working.
 
 ## Documentation
 
