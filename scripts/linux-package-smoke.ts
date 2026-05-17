@@ -7,6 +7,7 @@ import packageJson from "../package.json" with { type: "json" };
 const execFileAsync = promisify(execFile);
 const linuxConfig = packageJson.build?.linux;
 const debConfig = packageJson.build?.deb;
+const requireArtifacts = process.argv.includes("--require-artifacts");
 assert.ok(linuxConfig, "electron-builder linux config is required");
 assert.equal(linuxConfig.category, "Development");
 assert.match(linuxConfig.synopsis ?? "", /Local-first GitHub/);
@@ -24,6 +25,10 @@ if (process.platform !== "linux") {
 const artifacts = await readdir("release").catch(() => []);
 const appImage = artifacts.find((name) => name.endsWith(".AppImage"));
 const deb = artifacts.find((name) => name.endsWith(".deb"));
+if (!requireArtifacts && (!appImage || !deb)) {
+  console.log("Linux package config smoke ok; boot smoke skipped because package artifacts are not present");
+  process.exit(0);
+}
 assert.ok(appImage, "Build an AppImage with pnpm package:linux before Linux boot smoke");
 assert.ok(deb, "Build a deb with pnpm package:linux before Linux boot smoke");
 await access(`release/${deb}`);

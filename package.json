@@ -28,7 +28,7 @@
     "package:mac:smoke": "tsx scripts/macos-package-smoke.ts",
     "package:win": "pnpm build && electron-builder --win nsis --x64",
     "package:linux": "pnpm build && electron-builder --linux AppImage deb --x64",
-    "package:linux:smoke": "tsx scripts/linux-package-smoke.ts",
+    "package:linux:smoke": "tsx scripts/linux-package-smoke.ts --require-artifacts",
     "beta:check": "pnpm security:scan && pnpm size:check && pnpm typecheck && pnpm test && pnpm lint && pnpm format && pnpm build",
     "security:scan": "tsx scripts/scan-repo-hygiene.ts",
     "size:check": "node scripts/check-file-limits.mjs",
