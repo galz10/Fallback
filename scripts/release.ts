@@ -16,7 +16,8 @@ interface Options {
   publishMode: PublishMode;
   allowDirty: boolean;
   yes: boolean;
-  dryRun: boolean;
+  releaseDryRun: boolean;
+  commandDryRun: boolean;
   wait: boolean;
 }
 
@@ -25,6 +26,13 @@ interface ReleaseRecord {
   isDraft: boolean;
   isPrerelease: boolean;
   publishedAt: string | null;
+}
+
+interface GitHubRepoInfo {
+  nameWithOwner?: string;
+  defaultBranchRef?: {
+    name?: string;
+  } | null;
 }
 
 const defaultWorkflow = "release.yml";
@@ -36,8 +44,7 @@ async function main(): Promise<void> {
   await ensureGitHubAuth();
   if (!options.allowDirty) await ensureCleanTree();
 
-  const repo = options.repo ?? (await gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])).trim();
-  if (!repo.includes("/")) throw new Error(`Could not resolve GitHub repository owner/name from gh: ${repo}`);
+  const { repo, defaultBranch } = await resolveRepoInfo(options.repo);
   const workflow = options.workflow;
   await ensureWorkflowExists(repo, workflow);
 
@@ -59,12 +66,16 @@ async function main(): Promise<void> {
     bump,
     targetRef,
     targetBranch,
+    workflowRef: defaultBranch,
     publishMode: options.publishMode,
-    dryRun: options.dryRun
+    releaseDryRun: options.releaseDryRun,
+    commandDryRun: options.commandDryRun
   });
 
   if (!options.yes) {
-    const confirmed = await promptConfirm("Trigger this release workflow?");
+    const confirmed = await promptConfirm(
+      options.releaseDryRun ? "Trigger this release dry-run workflow?" : "Trigger this release workflow?"
+    );
     if (!confirmed) {
       console.log("Release canceled.");
       return;
@@ -78,7 +89,7 @@ async function main(): Promise<void> {
     "--repo",
     repo,
     "--ref",
-    targetBranch || targetRef,
+    defaultBranch,
     "--field",
     `version=${nextVersion}`,
     "--field",
@@ -86,16 +97,18 @@ async function main(): Promise<void> {
     "--field",
     `target_ref=${targetRef}`,
     "--field",
-    "skip_tests=false"
+    "skip_tests=false",
+    "--field",
+    `dry_run=${options.releaseDryRun ? "true" : "false"}`
   ];
 
-  if (options.dryRun) {
-    console.log(`Dry run command:\n  gh ${workflowArgs.map(shellQuote).join(" ")}`);
+  if (options.commandDryRun) {
+    console.log(`Command preview:\n  gh ${workflowArgs.map(shellQuote).join(" ")}`);
     return;
   }
 
   await gh(workflowArgs);
-  console.log("Release workflow dispatched.");
+  console.log(options.releaseDryRun ? "Release dry-run workflow dispatched." : "Release workflow dispatched.");
   console.log(`Workflow page: https://github.com/${repo}/actions/workflows/${workflow}`);
 
   if (options.wait) {
@@ -119,7 +132,8 @@ function parseArgs(args: string[]): Options {
     publishMode: "draft",
     allowDirty: false,
     yes: false,
-    dryRun: false,
+    releaseDryRun: false,
+    commandDryRun: false,
     wait: false
   };
 
@@ -141,7 +155,8 @@ function parseArgs(args: string[]): Options {
     else if (arg === "--draft") options.publishMode = "draft";
     else if (arg === "--allow-dirty") options.allowDirty = true;
     else if (arg === "--yes" || arg === "-y") options.yes = true;
-    else if (arg === "--dry-run") options.dryRun = true;
+    else if (arg === "--dry-run") options.releaseDryRun = true;
+    else if (arg === "--print-command") options.commandDryRun = true;
     else if (arg === "--wait") options.wait = true;
     else if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -169,7 +184,8 @@ Options:
   --draft                    Create draft release. Default.
   --allow-dirty              Allow local uncommitted changes.
   --yes, -y                  Skip confirmation prompt.
-  --dry-run                  Print the gh workflow command without running it.
+  --dry-run                  Build and verify artifacts without tagging or publishing.
+  --print-command            Print the gh workflow command without running it.
   --wait                     Watch the created workflow run when it can be resolved.
   --help, -h                 Show this help.
 `);
@@ -204,6 +220,19 @@ async function ensureWorkflowExists(repo: string, workflow: string): Promise<voi
   } catch {
     throw new Error(`Could not find workflow ${workflow} in ${repo}.`);
   }
+}
+
+async function resolveRepoInfo(repoOption: string | null): Promise<{ repo: string; defaultBranch: string }> {
+  const args = repoOption
+    ? ["repo", "view", repoOption, "--json", "nameWithOwner,defaultBranchRef"]
+    : ["repo", "view", "--json", "nameWithOwner,defaultBranchRef"];
+  const raw = await gh(args);
+  const info = JSON.parse(raw) as GitHubRepoInfo;
+  const repo = (info.nameWithOwner ?? repoOption ?? "").trim();
+  const defaultBranch = info.defaultBranchRef?.name?.trim() ?? "";
+  if (!repo.includes("/")) throw new Error(`Could not resolve GitHub repository owner/name from gh: ${repo}`);
+  if (!defaultBranch) throw new Error(`Could not resolve default branch for ${repo}.`);
+  return { repo, defaultBranch };
 }
 
 async function latestStableRelease(repo: string): Promise<ReleaseRecord | null> {
@@ -258,8 +287,10 @@ function printSummary(input: {
   bump: Bump;
   targetRef: string;
   targetBranch: string;
+  workflowRef: string;
   publishMode: PublishMode;
-  dryRun: boolean;
+  releaseDryRun: boolean;
+  commandDryRun: boolean;
 }): void {
   console.log("");
   console.log("Release summary");
@@ -269,9 +300,11 @@ function printSummary(input: {
   console.log(`  Next version:  v${input.nextVersion}`);
   console.log(`  Bump:          ${input.bump}`);
   console.log(`  Target ref:    ${input.targetRef}`);
-  console.log(`  Workflow ref:  ${input.targetBranch || input.targetRef}`);
+  console.log(`  Source branch: ${input.targetBranch || "detached HEAD"}`);
+  console.log(`  Workflow ref:  ${input.workflowRef}`);
   console.log(`  Mode:          ${input.publishMode}`);
-  console.log(`  Dry run:       ${input.dryRun ? "yes" : "no"}`);
+  console.log(`  Release dry run: ${input.releaseDryRun ? "yes" : "no"}`);
+  console.log(`  Command preview: ${input.commandDryRun ? "yes" : "no"}`);
   console.log("");
   console.log("Updater asset contract");
   console.log("  macOS:   signed DMG, ZIP payload, latest-mac.yml, blockmaps");

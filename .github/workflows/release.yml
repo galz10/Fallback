@@ -24,6 +24,11 @@ on:
         required: true
         default: false
         type: boolean
+      dry_run:
+        description: Build and verify release artifacts without creating a tag or GitHub Release.
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -41,6 +46,18 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       target_sha: ${{ steps.release.outputs.target_sha }}
     steps:
+      - name: Require repository admin actor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          permission="$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" --jq '.permission')"
+          if [[ "$permission" != "admin" ]]; then
+            echo "Only repository admins can run release workflows. Actor '${{ github.actor }}' has '$permission' permission." >&2
+            exit 1
+          fi
+
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.target_ref }}
@@ -334,6 +351,7 @@ jobs:
           )
 
       - name: Create and push release tag
+        if: ${{ !inputs.dry_run }}
         shell: bash
         run: |
           set -euo pipefail
@@ -346,6 +364,7 @@ jobs:
           git push origin "refs/tags/$tag"
 
       - name: Create or update GitHub Release
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -363,3 +382,12 @@ jobs:
             create_args+=(--draft)
           fi
           gh release create "${create_args[@]}"
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Dry run completed for ${{ needs.preflight.outputs.tag }}."
+          echo "Built, signed, verified, and checksummed release assets without creating a tag or GitHub Release."
+          find release-assets -maxdepth 1 -type f -print | sort
