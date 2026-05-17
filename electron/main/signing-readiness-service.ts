@@ -292,7 +292,7 @@ function gpgFingerprintsFromRawKey(rawKey: string | null | undefined): string[] 
 }
 
 function looksLikePath(value: string): boolean {
-  return value.startsWith("/") || value.startsWith("~/") || value.startsWith("./") || value.startsWith("../");
+  return path.isAbsolute(value) || value.startsWith("~/") || value.startsWith("./") || value.startsWith("../");
 }
 
 function resolveSigningPath(value: string, localPath: string): string {
