@@ -1,0 +1,41 @@
+{
+  "maxBytes": 100000,
+  "maxLines": 2500,
+  "ignore": [
+    ".build/**",
+    ".git/**",
+    "build/**",
+    "coverage/**",
+    "dist/**",
+    "dist-electron/**",
+    "fallback-vid/demos/raw/*.mp4",
+    "fallback-vid/assets/*.png",
+    "fallback-vid/demos/raw/*.mov",
+    "fallback-vid/demos/raw/*.png",
+    "node_modules/**",
+    "release/**",
+    "src/renderer/assets/*.png",
+    "pnpm-lock.yaml",
+    "true",
+    "true.zwc",
+    "*.tsbuildinfo",
+    "electron/main/build-config.generated.ts"
+  ],
+  "overrides": [
+    {
+      "pattern": "*.md",
+      "maxBytes": 30000,
+      "maxLines": 800
+    },
+    {
+      "pattern": ".github/workflows/*.yml",
+      "maxBytes": 60000,
+      "maxLines": 600
+    },
+    {
+      "pattern": "src/shared/contracts/ipc-channels.ts",
+      "maxBytes": 100000,
+      "maxLines": 3000
+    }
+  ]
+}

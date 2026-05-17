@@ -1,0 +1,7 @@
+dist
+dist-electron
+node_modules
+release
+coverage
+pnpm-lock.yaml
+*.tsbuildinfo

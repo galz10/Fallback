@@ -1,0 +1,2 @@
+-- Initial schema is applied from db/schema.ts so TypeScript and SQLite setup
+-- share one source of truth during the foundation phase.

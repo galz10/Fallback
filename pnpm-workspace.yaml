@@ -1,0 +1,13 @@
+blockExoticSubdeps: true
+minimumReleaseAge: 20160
+minimumReleaseAgeExclude:
+  # Already locked through Redux Toolkit; needed so direct dependency updates can re-resolve.
+  - immer@11.1.6
+strictDepBuilds: true
+trustPolicy: no-downgrade
+onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
+  - electron-winstaller
+  - esbuild
+  - keytar

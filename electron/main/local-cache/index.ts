@@ -1,0 +1,70 @@
+import type { SqliteDatabase } from "./store-types.js";
+import { AccountStore } from "./account-store.js";
+import { AppMetadataStore } from "./app-metadata-store.js";
+import { AttentionStore } from "./attention-store.js";
+import { BranchIntegrityStore } from "./branch-integrity-store.js";
+import { CacheSummaryStore } from "./cache-summary-store.js";
+import { DiagnosticEventStore } from "./diagnostic-event-store.js";
+import { GitHubWorkStore } from "./github-work-store.js";
+import { HealthStore } from "./health-store.js";
+import { NotificationStore } from "./notification-store.js";
+import { OfflineActionStore } from "./offline-action-store.js";
+import { OperationRecordStore } from "./operation-record-store.js";
+import { RepoAccountStore } from "./repo-account-store.js";
+import { RepoGroupStore } from "./repo-group-store.js";
+import { RepoIdentityStore } from "./repo-identity-store.js";
+import { RepoMetadataStore } from "./repo-metadata-store.js";
+import { RepoStore } from "./repo-store.js";
+import { RepoWorkspaceStore } from "./repo-workspace-store.js";
+import { ReviewDraftStore } from "./review-draft-store.js";
+import { SearchIndexStore } from "./search-index-store.js";
+import { SyncJobStore } from "./sync-job-store.js";
+
+export interface LocalCacheStores {
+  accounts: AccountStore;
+  appMetadata: AppMetadataStore;
+  attention: AttentionStore;
+  branchIntegrity: BranchIntegrityStore;
+  cacheSummary: CacheSummaryStore;
+  diagnostics: DiagnosticEventStore;
+  githubWork: GitHubWorkStore;
+  health: HealthStore;
+  notifications: NotificationStore;
+  offlineActions: OfflineActionStore;
+  operationRecords: OperationRecordStore;
+  repoAccounts: RepoAccountStore;
+  repoGroups: RepoGroupStore;
+  repoIdentities: RepoIdentityStore;
+  repoMetadata: RepoMetadataStore;
+  repos: RepoStore;
+  repoWorkspaces: RepoWorkspaceStore;
+  reviewDrafts: ReviewDraftStore;
+  searchIndex: SearchIndexStore;
+  syncJobs: SyncJobStore;
+}
+
+export function createLocalCacheStores(db: SqliteDatabase): LocalCacheStores {
+  const stores = {} as LocalCacheStores;
+  const getStores = () => stores;
+  stores.operationRecords = new OperationRecordStore(db);
+  stores.accounts = new AccountStore(db, getStores) as AccountStore;
+  stores.appMetadata = new AppMetadataStore(db, getStores) as AppMetadataStore;
+  stores.attention = new AttentionStore(db, getStores) as AttentionStore;
+  stores.branchIntegrity = new BranchIntegrityStore(db, getStores) as BranchIntegrityStore;
+  stores.cacheSummary = new CacheSummaryStore(db, getStores) as CacheSummaryStore;
+  stores.diagnostics = new DiagnosticEventStore(db, getStores) as DiagnosticEventStore;
+  stores.githubWork = new GitHubWorkStore(db, getStores) as GitHubWorkStore;
+  stores.health = new HealthStore(db, getStores) as HealthStore;
+  stores.notifications = new NotificationStore(db, getStores) as NotificationStore;
+  stores.offlineActions = new OfflineActionStore(db, getStores) as OfflineActionStore;
+  stores.repoAccounts = new RepoAccountStore(db, getStores) as RepoAccountStore;
+  stores.repoGroups = new RepoGroupStore(db, getStores) as RepoGroupStore;
+  stores.repoIdentities = new RepoIdentityStore(db, getStores) as RepoIdentityStore;
+  stores.repoMetadata = new RepoMetadataStore(db, getStores) as RepoMetadataStore;
+  stores.repos = new RepoStore(db, getStores) as RepoStore;
+  stores.repoWorkspaces = new RepoWorkspaceStore(db, getStores) as RepoWorkspaceStore;
+  stores.reviewDrafts = new ReviewDraftStore(db, getStores) as ReviewDraftStore;
+  stores.searchIndex = new SearchIndexStore(db, getStores) as SearchIndexStore;
+  stores.syncJobs = new SyncJobStore(db, getStores) as SyncJobStore;
+  return stores;
+}

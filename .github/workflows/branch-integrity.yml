@@ -1,0 +1,36 @@
+name: Branch Integrity
+
+on:
+  merge_group:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Record current tree
+        id: current
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tree=$(git rev-parse HEAD^{tree})" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve tested merge group
+        if: github.event_name == 'merge_group'
+        run: |
+          git push origin HEAD:refs/fallback/merge-groups/${{ github.run_id }}
+
+      - name: Preserve main checkpoint
+        if: github.event_name == 'push'
+        run: |
+          git push origin ${{ github.event.before }}:refs/fallback/checkpoints/main-before-${{ github.run_id }} || true
+          git push origin HEAD:refs/fallback/checkpoints/main-after-${{ github.run_id }}

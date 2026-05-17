@@ -1,0 +1,3 @@
+-- Fallback production baseline.
+-- Schema version 14 is defined in db/schema.ts and applied by DatabaseService.
+-- Future schema changes must add an ordered migration file after this baseline.

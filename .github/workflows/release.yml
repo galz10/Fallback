@@ -1,0 +1,365 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable release version without v prefix, for example 1.2.3.
+        required: true
+        type: string
+      publish_mode:
+        description: Create a draft release by default.
+        required: true
+        default: draft
+        type: choice
+        options:
+          - draft
+          - published
+      target_ref:
+        description: Commit SHA, branch, or tag to release.
+        required: true
+        type: string
+      skip_tests:
+        description: Skip the full test gate. Use only for emergency rebuilds.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  FALLBACK_RELEASE_VERSION: ${{ inputs.version }}
+  FALLBACK_UPDATE_REPOSITORY: ${{ github.repository }}
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      target_sha: ${{ steps.release.outputs.target_sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.target_ref }}
+          fetch-depth: 0
+
+      - id: release
+        name: Validate release input
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must be stable semver without v prefix: $version" >&2
+            exit 1
+          fi
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Remote tag already exists: $tag" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run release gate
+        if: ${{ !inputs.skip_tests }}
+        run: pnpm audit --prod && pnpm beta:check
+
+      - name: Run lightweight build gate
+        if: ${{ inputs.skip_tests }}
+        run: pnpm build
+
+  build_macos:
+    name: Build macOS
+    runs-on: macos-14
+    needs: preflight
+    environment: release
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.preflight.outputs.target_sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prepare release builder config
+        run: pnpm release:builder-config -- --version "${{ needs.preflight.outputs.version }}" --repository "${{ github.repository }}"
+
+      - name: Build signed and notarized macOS artifacts
+        env:
+          MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          MACOS_DEVELOPER_ID_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          FALLBACK_NOTARIZE: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          cert="${MAC_CERTIFICATE_P12_BASE64:-$MACOS_DEVELOPER_ID_CERTIFICATE}"
+          cert_password="${MAC_CERTIFICATE_PASSWORD:-$MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD}"
+          if [[ -z "$cert" || -z "$cert_password" ]]; then
+            echo "Missing macOS signing certificate secrets." >&2
+            exit 1
+          fi
+          echo "CSC_LINK=$cert" >> "$GITHUB_ENV"
+          echo "CSC_KEY_PASSWORD=$cert_password" >> "$GITHUB_ENV"
+          if [[ -n "$APPLE_API_KEY" ]]; then
+            key_dir="$RUNNER_TEMP/apple-api-key"
+            mkdir -p "$key_dir"
+            key_path="$key_dir/AuthKey_${APPLE_API_KEY_ID}.p8"
+            printf '%s' "$APPLE_API_KEY" > "$key_path"
+            echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          fi
+          pnpm build
+          pnpm exec electron-builder --config .build/electron-builder.release.json --mac dmg zip --arm64 --publish never
+
+      - name: Notarize and staple macOS DMG
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmgs=(release/*.dmg)
+          if (( ${#dmgs[@]} == 0 )); then
+            echo "No DMG artifacts found to notarize." >&2
+            exit 1
+          fi
+          for dmg in "${dmgs[@]}"; do
+            if [[ -n "${APPLE_API_KEY_PATH:-}" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" ]]; then
+              xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+            elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+              xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            else
+              echo "Missing macOS notarization credentials for DMG." >&2
+              exit 1
+            fi
+            xcrun stapler staple "$dmg"
+            xcrun stapler validate "$dmg"
+            spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+          done
+
+      - name: Smoke signed macOS app
+        run: pnpm package:mac:smoke -- --require-signed --require-notarized
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fallback-macos-${{ needs.preflight.outputs.tag }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*mac*.yml
+            release/*.blockmap
+          if-no-files-found: error
+
+  build_windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: preflight
+    environment: release
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.preflight.outputs.target_sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prepare release builder config
+        env:
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          AZURE_TRUSTED_SIGNING_TIMESTAMP_RFC3161: ${{ vars.AZURE_TRUSTED_SIGNING_TIMESTAMP_RFC3161 }}
+          WINDOWS_PUBLISHER_NAME: ${{ vars.WINDOWS_PUBLISHER_NAME }}
+        run: pnpm release:builder-config -- --version "${{ needs.preflight.outputs.version }}" --repository "${{ github.repository }}"
+
+      - name: Build signed Windows artifacts
+        shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CLIENT_CERTIFICATE_PATH: ${{ secrets.AZURE_CLIENT_CERTIFICATE_PATH }}
+          AZURE_CLIENT_CERTIFICATE_PASSWORD: ${{ secrets.AZURE_CLIENT_CERTIFICATE_PASSWORD }}
+          AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: ${{ secrets.AZURE_CLIENT_SEND_CERTIFICATE_CHAIN }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          WINDOWS_PUBLISHER_NAME: ${{ vars.WINDOWS_PUBLISHER_NAME }}
+          WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $hasAzureSigningConfig = $env:AZURE_TRUSTED_SIGNING_ENDPOINT -and $env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME -and $env:AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME -and $env:WINDOWS_PUBLISHER_NAME
+          $hasAzureAuth = $env:AZURE_TENANT_ID -and $env:AZURE_CLIENT_ID -and ($env:AZURE_CLIENT_SECRET -or $env:AZURE_CLIENT_CERTIFICATE_PATH)
+          if ($hasAzureSigningConfig) {
+            if (-not $hasAzureAuth) {
+              throw "Azure Trusted Signing is configured, but Azure auth is incomplete. Set AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET or AZURE_CLIENT_CERTIFICATE_PATH."
+            }
+            Write-Host "Using Azure Trusted Signing for Windows artifacts."
+          } elseif ($env:WINDOWS_CERTIFICATE_PFX_BASE64 -and $env:WINDOWS_CERTIFICATE_PASSWORD) {
+            Write-Host "Using fallback PFX signing for Windows artifacts."
+            "CSC_LINK=$env:WINDOWS_CERTIFICATE_PFX_BASE64" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "CSC_KEY_PASSWORD=$env:WINDOWS_CERTIFICATE_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } else {
+            throw "Missing Windows signing configuration. Configure Azure Trusted Signing secrets/variables, or fallback WINDOWS_CERTIFICATE_PFX_BASE64 and WINDOWS_CERTIFICATE_PASSWORD."
+          }
+          pnpm build
+          pnpm exec electron-builder --config .build/electron-builder.release.json --win nsis --x64 --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fallback-windows-${{ needs.preflight.outputs.tag }}
+          path: |
+            release/*.exe
+            release/*.yml
+            release/*.blockmap
+          if-no-files-found: error
+
+  build_linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    needs: preflight
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.preflight.outputs.target_sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prepare release builder config
+        run: pnpm release:builder-config -- --version "${{ needs.preflight.outputs.version }}" --repository "${{ github.repository }}"
+
+      - name: Build Linux artifacts
+        run: |
+          pnpm build
+          pnpm exec electron-builder --config .build/electron-builder.release.json --linux AppImage deb --x64 --publish never
+
+      - name: Smoke Linux package
+        run: pnpm package:linux:smoke
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fallback-linux-${{ needs.preflight.outputs.tag }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*linux*.yml
+            release/*.blockmap
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - preflight
+      - build_macos
+      - build_windows
+      - build_linux
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.preflight.outputs.target_sha }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fallback-*-${{ needs.preflight.outputs.tag }}
+          merge-multiple: true
+          path: release-assets
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-assets -maxdepth 1 -type f -print | sort
+          (
+            cd release-assets
+            shasum -a 256 * > SHA256SUMS.txt
+          )
+
+      - name: Create and push release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.preflight.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse "$tag" >/dev/null 2>&1; then
+            git tag -a "$tag" "${{ needs.preflight.outputs.target_sha }}" -m "Fallback $tag"
+          fi
+          git push origin "refs/tags/$tag"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.preflight.outputs.tag }}"
+          title="Fallback $tag"
+          args=(--repo "${{ github.repository }}")
+          if gh release view "$tag" "${args[@]}" >/dev/null 2>&1; then
+            gh release upload "$tag" release-assets/* "${args[@]}" --clobber
+            exit 0
+          fi
+          create_args=("$tag" release-assets/* "${args[@]}" --title "$title" --generate-notes)
+          if [[ "${{ inputs.publish_mode }}" == "draft" ]]; then
+            create_args+=(--draft)
+          fi
+          gh release create "${create_args[@]}"
