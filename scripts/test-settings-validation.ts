@@ -43,28 +43,32 @@ assert.throws(() => validateSettingsPatch({ attention: { collapseBotActivity: "y
 assert.throws(() => validateHandoffCommand("./code"), /command name or an absolute/);
 assert.throws(() => validateHandoffCommand("code bad\u0000arg"), /invalid argument/);
 
+const trustedWorkspacePath = path.join(path.sep, "Users", "mona", "Fallback");
+const trustedRepoPath = path.join(path.sep, "Users", "mona", "src", "octo-repo");
+const trustedWorktreePath = path.join(path.sep, "Users", "mona", "src", "octo-repo-worktree");
+
 const trustedPathServices = {
-  settings: { get: () => ({ workspacePath: "/Users/mona/Fallback" }) },
+  settings: { get: () => ({ workspacePath: trustedWorkspacePath }) },
   database: {
-    listWatchedReposForActiveAccount: () => [{ id: "octo-repo", localPath: "/Users/mona/src/octo-repo" }],
-    listRepoWorkspaces: (repoId: string) => (repoId === "octo-repo" ? [{ localPath: "/Users/mona/src/octo-repo-worktree" }] : [])
+    listWatchedReposForActiveAccount: () => [{ id: "octo-repo", localPath: trustedRepoPath }],
+    listRepoWorkspaces: (repoId: string) => (repoId === "octo-repo" ? [{ localPath: trustedWorktreePath }] : [])
   }
 };
 
 assert.equal(
-  assertTrustedLocalPath(trustedPathServices, "/Users/mona/src/octo-repo/src/index.ts"),
-  "/Users/mona/src/octo-repo/src/index.ts"
+  assertTrustedLocalPath(trustedPathServices, path.join(trustedRepoPath, "src", "index.ts")),
+  path.join(trustedRepoPath, "src", "index.ts")
 );
 assert.equal(
-  assertTrustedLocalPath(trustedPathServices, "/Users/mona/src/octo-repo-worktree/README.md"),
-  "/Users/mona/src/octo-repo-worktree/README.md"
+  assertTrustedLocalPath(trustedPathServices, path.join(trustedWorktreePath, "README.md")),
+  path.join(trustedWorktreePath, "README.md")
 );
 assert.equal(
-  assertTrustedLocalPath(trustedPathServices, "/Users/mona/Fallback/.fallback/fallback.sqlite"),
-  "/Users/mona/Fallback/.fallback/fallback.sqlite"
+  assertTrustedLocalPath(trustedPathServices, path.join(trustedWorkspacePath, ".fallback", "fallback.sqlite")),
+  path.join(trustedWorkspacePath, ".fallback", "fallback.sqlite")
 );
 assert.throws(
-  () => assertTrustedLocalPath(trustedPathServices, "/Users/mona/Downloads/secret.txt"),
+  () => assertTrustedLocalPath(trustedPathServices, path.join(path.sep, "Users", "mona", "Downloads", "secret.txt")),
   /outside Fallback's trusted workspaces/
 );
 
