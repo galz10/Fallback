@@ -18,6 +18,8 @@ const cache = new CacheService(database, settings, workspace);
 const secretRepo = "secret-org/secret-repo";
 const secretRepoId = `github.com/${secretRepo}`;
 
+const jsonStringValue = (value: string) => JSON.stringify(value).slice(1, -1);
+
 try {
   insertWatchedRepoFixture(database, {
     id: secretRepoId,
@@ -77,11 +79,15 @@ try {
 
   const redacted = cache.exportDiagnostics();
   const redactedBody = await readFile(redacted.path, "utf8");
+  const jsonSecretWorkspacePath = jsonStringValue(secretWorkspacePath);
+  const jsonTempDir = jsonStringValue(tempDir);
   assert.equal(redacted.redacted, true);
   assert.equal(redactedBody.includes(secretRepo), false);
   assert.equal(redactedBody.includes(secretRepoId), false);
   assert.equal(redactedBody.includes(secretWorkspacePath), false);
+  assert.equal(redactedBody.includes(jsonSecretWorkspacePath), false);
   assert.equal(redactedBody.includes(tempDir), false);
+  assert.equal(redactedBody.includes(jsonTempDir), false);
   assert.equal(redactedBody.includes("customer-alpha-secret-feature"), false);
   assert.equal(redactedBody.includes("supersecret"), false);
   assert.match(redactedBody, /"workspacePath": "\[redacted\]"/);
@@ -100,7 +106,7 @@ try {
   const sensitiveBody = await readFile(sensitive.path, "utf8");
   assert.equal(sensitive.redacted, false);
   assert.match(sensitiveBody, new RegExp(secretRepo.replace("/", "\\/")));
-  assert.match(sensitiveBody, new RegExp(secretWorkspacePath.replaceAll("/", "\\/")));
+  assert.equal(sensitiveBody.includes(jsonSecretWorkspacePath), true);
 
   console.log("Diagnostics redaction tests ok");
 } finally {
