@@ -43,9 +43,9 @@ assert.throws(() => validateSettingsPatch({ attention: { collapseBotActivity: "y
 assert.throws(() => validateHandoffCommand("./code"), /command name or an absolute/);
 assert.throws(() => validateHandoffCommand("code bad\u0000arg"), /invalid argument/);
 
-const trustedWorkspacePath = path.join(path.sep, "Users", "mona", "Fallback");
-const trustedRepoPath = path.join(path.sep, "Users", "mona", "src", "octo-repo");
-const trustedWorktreePath = path.join(path.sep, "Users", "mona", "src", "octo-repo-worktree");
+const trustedWorkspacePath = path.resolve(path.join(path.sep, "Users", "mona", "Fallback"));
+const trustedRepoPath = path.resolve(path.join(path.sep, "Users", "mona", "src", "octo-repo"));
+const trustedWorktreePath = path.resolve(path.join(path.sep, "Users", "mona", "src", "octo-repo-worktree"));
 
 const trustedPathServices = {
   settings: { get: () => ({ workspacePath: trustedWorkspacePath }) },
