@@ -63,6 +63,7 @@ async function run(): Promise<void> {
     await git(seedPath, ["commit", "-m", "initial"]);
     await git(seedPath, ["remote", "add", "origin", remotePath]);
     await git(seedPath, ["push", "-u", "origin", "main"]);
+    await git(remotePath, ["symbolic-ref", "HEAD", "refs/heads/main"]);
 
     const cleanService = new WorkspaceService(() => settings(cleanWorkspace));
     const cleanClone = await cleanService.ensureRepoClone("octo", "repo", remotePath, "main");
