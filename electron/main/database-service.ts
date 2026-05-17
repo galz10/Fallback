@@ -54,40 +54,53 @@ export class DatabaseService {
     const startedAt = performance.now();
     this.db = new Database(databasePath);
     const openedAt = performance.now();
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    const pragmasAppliedAt = performance.now();
-    this.localCache = createLocalCacheStores(this.db);
-    this.operationRecords = this.localCache.operationRecords;
-    this.accounts = this.localCache.accounts;
-    this.appMetadata = this.localCache.appMetadata;
-    this.attention = this.localCache.attention;
-    this.branchIntegrity = this.localCache.branchIntegrity;
-    this.cacheSummaries = this.localCache.cacheSummary;
-    this.diagnostics = this.localCache.diagnostics;
-    this.githubWork = this.localCache.githubWork;
-    this.health = this.localCache.health;
-    this.notifications = this.localCache.notifications;
-    this.offlineActions = this.localCache.offlineActions;
-    this.repoAccounts = this.localCache.repoAccounts;
-    this.repoGroups = this.localCache.repoGroups;
-    this.repoIdentities = this.localCache.repoIdentities;
-    this.repoMetadata = this.localCache.repoMetadata;
-    this.repos = this.localCache.repos;
-    this.repoWorkspaces = this.localCache.repoWorkspaces;
-    this.reviewDrafts = this.localCache.reviewDrafts;
-    this.searchIndex = this.localCache.searchIndex;
-    this.syncJobs = this.localCache.syncJobs;
-    const schema = new LocalCacheSchemaManager(this.databasePath, this.db, this.localCache);
-    const schemaWasReady = schema.schemaReadyForStartup();
-    if (!schemaWasReady) schema.migrateWithBackup();
-    const migratedAt = performance.now();
-    const readyAt = performance.now();
-    this.logOpenTiming(startedAt, openedAt, pragmasAppliedAt, migratedAt, readyAt, schemaWasReady);
+    try {
+      this.db.pragma("journal_mode = WAL");
+      this.db.pragma("foreign_keys = ON");
+      const pragmasAppliedAt = performance.now();
+      this.localCache = createLocalCacheStores(this.db);
+      this.operationRecords = this.localCache.operationRecords;
+      this.accounts = this.localCache.accounts;
+      this.appMetadata = this.localCache.appMetadata;
+      this.attention = this.localCache.attention;
+      this.branchIntegrity = this.localCache.branchIntegrity;
+      this.cacheSummaries = this.localCache.cacheSummary;
+      this.diagnostics = this.localCache.diagnostics;
+      this.githubWork = this.localCache.githubWork;
+      this.health = this.localCache.health;
+      this.notifications = this.localCache.notifications;
+      this.offlineActions = this.localCache.offlineActions;
+      this.repoAccounts = this.localCache.repoAccounts;
+      this.repoGroups = this.localCache.repoGroups;
+      this.repoIdentities = this.localCache.repoIdentities;
+      this.repoMetadata = this.localCache.repoMetadata;
+      this.repos = this.localCache.repos;
+      this.repoWorkspaces = this.localCache.repoWorkspaces;
+      this.reviewDrafts = this.localCache.reviewDrafts;
+      this.searchIndex = this.localCache.searchIndex;
+      this.syncJobs = this.localCache.syncJobs;
+      const schema = new LocalCacheSchemaManager(this.databasePath, this.db, this.localCache);
+      const schemaWasReady = schema.schemaReadyForStartup();
+      if (!schemaWasReady) schema.migrateWithBackup();
+      const migratedAt = performance.now();
+      const readyAt = performance.now();
+      this.logOpenTiming(startedAt, openedAt, pragmasAppliedAt, migratedAt, readyAt, schemaWasReady);
+    } catch (error) {
+      this.closeAfterFailedOpen();
+      throw error;
+    }
   }
 
   close(): void {
     this.db.close();
+  }
+
+  private closeAfterFailedOpen(): void {
+    try {
+      this.db.close();
+    } catch {
+      // Preserve the original open or migration failure.
+    }
   }
 
   private logOpenTiming(
