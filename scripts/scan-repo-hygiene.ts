@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 
 type PackageJson = {
   packageManager?: string;
@@ -40,7 +40,7 @@ const exactSemverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]
 for (const file of trackedFiles) {
   if (deletedFiles.has(file)) continue;
   if (forbiddenTrackedFiles.some((pattern) => pattern.test(file))) failures.push(`Forbidden generated or local file is tracked: ${file}`);
-  const stat = statSync(file);
+  const stat = lstatSync(file);
   if (!stat.isFile() || stat.size > 1_000_000) continue;
   const body = readTextIfPossible(file);
   if (body == null) continue;
