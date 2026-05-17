@@ -26,6 +26,7 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+      - run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 libsecret-1-dev pkg-config
       - run: pnpm install --frozen-lockfile
       - run: pnpm security:scan
       - run: pnpm beta:check
@@ -51,33 +52,4 @@ jobs:
         with:
           name: fallback-macos-dir-${{ github.sha }}
           path: release/mac*/Fallback.app
-          if-no-files-found: error
-
-  macos-signed-release:
-    runs-on: macos-14
-    if: startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.2
-      - uses: actions/setup-node@v5
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm package:mac
-        env:
-          CSC_LINK: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      - run: pnpm package:mac:smoke -- --require-signed --require-notarized
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fallback-macos-release-${{ github.ref_name }}
-          path: |
-            release/*.dmg
-            release/*.blockmap
           if-no-files-found: error
