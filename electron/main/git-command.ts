@@ -6,17 +6,51 @@ const gitMaxBuffer = 24 * 1024 * 1024;
 export async function gitRaw(cwd: string, args: string[], timeout = 30_000, allowExitCodes = [0], signal?: AbortSignal): Promise<string> {
   const startedAt = performance.now();
   return new Promise((resolve, reject) => {
-    execFile("git", ["-C", cwd, ...args], { encoding: "utf8", maxBuffer: gitMaxBuffer, timeout, signal }, (error, stdout, stderr) => {
+    let timedOut = false;
+    let aborted = false;
+    let stopPromise: Promise<void> | null = null;
+    const child = execFile("git", ["-C", cwd, ...args], { encoding: "utf8", maxBuffer: gitMaxBuffer }, (error, stdout, stderr) => {
+      void settle(error, stdout, stderr);
+    });
+    const stopChild = () => {
+      stopPromise ??= stopProcessTree(child.pid).finally(() => {
+        child.kill();
+      });
+      return stopPromise;
+    };
+    const timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      void stopChild();
+    }, timeout);
+    const abortHandler = () => {
+      aborted = true;
+      void stopChild();
+    };
+    signal?.addEventListener("abort", abortHandler, { once: true });
+    if (signal?.aborted) abortHandler();
+
+    async function settle(error: Error | null, stdout: string, stderr: string): Promise<void> {
+      clearTimeout(timeoutHandle);
+      signal?.removeEventListener("abort", abortHandler);
+      if (stopPromise) await stopPromise;
       const durationMs = performance.now() - startedAt;
       if (durationMs >= 250) {
         console.warn(`[perf] slow git ${formatGitCommand(args)} in ${path.basename(cwd)}: ${Math.round(durationMs)}ms`);
+      }
+      if (timedOut) {
+        reject(new Error(formatGitError(cwd, stderr.trim() || `Git command timed out after ${timeout}ms.`)));
+        return;
+      }
+      if (aborted) {
+        reject(new Error(formatGitError(cwd, stderr.trim() || "Git command was aborted.")));
+        return;
       }
       if (error && !allowExitCodes.includes(gitExitCode(error))) {
         reject(new Error(formatGitError(cwd, stderr.trim() || error.message)));
         return;
       }
       resolve(stdout);
-    });
+    }
   });
 }
 
@@ -37,4 +71,12 @@ export function formatGitError(cwd: string, message: string): string {
 
 function formatGitCommand(args: string[]): string {
   return args.map((arg) => (arg.length > 80 ? `${arg.slice(0, 77)}...` : arg)).join(" ");
+}
+
+async function stopProcessTree(pid: number | undefined): Promise<void> {
+  if (!pid) return;
+  if (process.platform !== "win32") return;
+  await new Promise<void>((resolve) => {
+    execFile("taskkill", ["/pid", String(pid), "/t", "/f"], { windowsHide: true }, () => resolve());
+  });
 }
