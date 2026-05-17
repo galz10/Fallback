@@ -72,7 +72,12 @@ export class RepoWorkspaceService {
     }
 
     for (const workspace of this.database.localCache.repoWorkspaces.listRepoWorkspaces(repoId)) {
-      if (!seenIds.has(workspace.id) && workspace.kind === "worktree")
+      if (
+        !seenIds.has(workspace.id) &&
+        (workspace.kind === "worktree" ||
+          pathsEqual(workspace.localPath, mainWorktreePath) ||
+          pathsEqual(workspace.localPath, repo.localPath))
+      )
         this.database.localCache.repoWorkspaces.deleteRepoWorkspace(repoId, workspace.id);
     }
 
