@@ -25,7 +25,7 @@ try {
   await git(seedPath, ["remote", "add", "origin", remotePath]);
   await git(seedPath, ["push", "-u", "origin", "main"]);
   await git(remotePath, ["symbolic-ref", "HEAD", "refs/heads/main"]);
-  await git(tempDir, ["clone", remotePath, appPath]);
+  await git(tempDir, ["-c", "core.autocrlf=false", "-c", "core.eol=lf", "clone", remotePath, appPath]);
   await configureUser(appPath);
   insertRepo(database, appPath, remotePath);
 
