@@ -1,6 +1,7 @@
 import type { WatchedRepo } from "../../../src/shared/domain/watched-repo.js";
 import type { CredentialDiagnosticStatus, RepoRemoteProtocol } from "../../../src/shared/domain/repo-identity.js";
 import type { LocalGitNetworkStatus, LocalGitPullStrategy } from "../../../src/shared/domain/local-git.js";
+import path from "node:path";
 import { gitRaw, gitText } from "../git-command.js";
 
 function errorMessage(error: unknown): string {
@@ -190,7 +191,7 @@ export function remoteProtocol(remoteUrl: string | null): RepoRemoteProtocol {
   if (!remoteUrl) return "unknown";
   if (/^https?:\/\//i.test(remoteUrl)) return "https";
   if (/^(ssh:\/\/|git@)/i.test(remoteUrl)) return "ssh";
-  if (/^file:\/\//i.test(remoteUrl) || remoteUrl.startsWith("/") || remoteUrl.startsWith(".")) return "file";
+  if (/^file:\/\//i.test(remoteUrl) || path.isAbsolute(remoteUrl) || remoteUrl.startsWith(".")) return "file";
   return "unknown";
 }
 
