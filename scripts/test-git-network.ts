@@ -96,6 +96,8 @@ try {
 async function configureUser(cwd: string): Promise<void> {
   await git(cwd, ["config", "user.name", "Fallback Test"]);
   await git(cwd, ["config", "user.email", "fallback-test@example.com"]);
+  await git(cwd, ["config", "core.autocrlf", "false"]);
+  await git(cwd, ["config", "core.eol", "lf"]);
 }
 
 async function commitFile(cwd: string, name: string, contents: string, message: string): Promise<void> {
