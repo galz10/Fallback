@@ -14,11 +14,11 @@ assert.match(stashWorkflowSource, /selected/);
 const mutationsSource = readFileSync(new URL("../src/renderer/features/local-changes/useLocalChangeMutations.ts", import.meta.url), "utf8");
 assert.match(
   mutationsSource,
-  /const stash = useMutation\(\{[\s\S]*?await invalidateLocalChanges\(\);\n\s*setStashesOpen\(true\);[\s\S]*?\}\);/
+  /const stash = useMutation\(\{[\s\S]*?await invalidateLocalChanges\(\);\r?\n\s*setStashesOpen\(true\);[\s\S]*?\}\);/
 );
 assert.match(
   mutationsSource,
-  /const stashSelected = useMutation\(\{[\s\S]*?await invalidateLocalChanges\(\);\n\s*setStashesOpen\(true\);[\s\S]*?\}\);/
+  /const stashSelected = useMutation\(\{[\s\S]*?await invalidateLocalChanges\(\);\r?\n\s*setStashesOpen\(true\);[\s\S]*?\}\);/
 );
 assert.match(mutationsSource, /onSuccess: async \(result, input\)/);
 assert.match(mutationsSource, /input\.action !== "drop" \|\| result\.stashes\.length === 0/);
