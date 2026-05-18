@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { classifyBranchIntegrity, diffStatSuspicion, parsePullRequestNumbersFromCommitMessage } from "../src/shared/branch-integrity.js";
 import type { BranchCommitObservation, MergeEvidence } from "../src/shared/domain/branch-integrity.js";
 import type { PullRequestSummary } from "../src/shared/domain/github-work.js";
 
 const execFileAsync = promisify(execFile);
+const require = createRequire(import.meta.url);
 
 assert.deepEqual(parsePullRequestNumbersFromCommitMessage("Merge pull request #12 from x\n\nRefs #99"), [12]);
 assert.deepEqual(parsePullRequestNumbersFromCommitMessage("ship integrity checks (#41)\n\nPR #42"), [41, 42]);
@@ -140,17 +141,15 @@ const testedSha = await git(repoDir, ["rev-parse", "HEAD"]);
 await git(repoDir, ["update-ref", "refs/fallback/merge-groups/1", testedSha]);
 await writeFile(path.join(repoDir, "app.txt"), "one\nlanded-wrong\n");
 await git(repoDir, ["commit", "-am", "landed wrong (#1)"]);
-const tsxBin = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "tsx.cmd" : "tsx"
+const tsxCli = require.resolve("tsx/cli");
+const { stdout } = await execFileAsync(
+  process.execPath,
+  [tsxCli, "scripts/audit-branch-integrity.ts", "--repo", repoDir, "--branch", "main", "--json"],
+  {
+    cwd: path.resolve("."),
+    encoding: "utf8"
+  }
 );
-const { stdout } = await execFileAsync(tsxBin, ["scripts/audit-branch-integrity.ts", "--repo", repoDir, "--branch", "main", "--json"], {
-  cwd: path.resolve("."),
-  encoding: "utf8"
-});
 const report = parseJsonReport(stdout) as { findings: Array<{ kind: string; severity: string }> };
 assert.equal(
   report.findings.some((finding) => finding.kind === "tested_tree_mismatch" && finding.severity === "critical"),
