@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseService } from "../electron/main/database-service.js";
@@ -13,6 +13,7 @@ import {
   createOperationServiceFixture,
   insertWatchedRepoFixture
 } from "./helpers/operation-record-fixtures.js";
+import { removeTempDir } from "../tests/fixtures/temp.js";
 
 const tempDir = await mkdtemp(path.join(os.tmpdir(), "fallback-operation-test-"));
 const database = new DatabaseService(path.join(tempDir, "fallback.sqlite"));
@@ -182,7 +183,7 @@ try {
   console.log("Operation service tests ok");
 } finally {
   database.close();
-  await rm(tempDir, { force: true, recursive: true });
+  await removeTempDir(tempDir);
 }
 
 async function waitForActiveOperation(db: DatabaseService, repoId: string) {
