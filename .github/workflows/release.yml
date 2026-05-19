@@ -135,6 +135,7 @@ jobs:
           MACOS_DEVELOPER_ID_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
           MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
           MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          MACOS_CODESIGN_IDENTITY: ${{ vars.MACOS_CODESIGN_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -145,23 +146,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cert="${MAC_CERTIFICATE_P12_BASE64:-$MACOS_DEVELOPER_ID_CERTIFICATE}"
-          cert_password="${MAC_CERTIFICATE_PASSWORD:-$MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD}"
+          cert="${MACOS_DEVELOPER_ID_CERTIFICATE:-$MAC_CERTIFICATE_P12_BASE64}"
+          cert_password="${MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD:-$MAC_CERTIFICATE_PASSWORD}"
           if [[ -z "$cert" || -z "$cert_password" ]]; then
             echo "Missing macOS signing certificate secrets." >&2
             exit 1
           fi
           export CSC_LINK="$cert"
           export CSC_KEY_PASSWORD="$cert_password"
+          export CSC_NAME="${MACOS_CODESIGN_IDENTITY:-Developer ID Application}"
           echo "CSC_LINK=$cert" >> "$GITHUB_ENV"
           echo "CSC_KEY_PASSWORD=$cert_password" >> "$GITHUB_ENV"
+          echo "CSC_NAME=$CSC_NAME" >> "$GITHUB_ENV"
           if [[ -n "$APPLE_API_KEY" ]]; then
             key_dir="$RUNNER_TEMP/apple-api-key"
             mkdir -p "$key_dir"
             key_path="$key_dir/AuthKey_${APPLE_API_KEY_ID}.p8"
             printf '%s' "$APPLE_API_KEY" > "$key_path"
+            keychain_profile="fallback-notary-${GITHUB_RUN_ID}"
+            xcrun notarytool store-credentials "$keychain_profile" --key "$key_path" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER"
             export APPLE_API_KEY_PATH="$key_path"
+            export APPLE_KEYCHAIN_PROFILE="$keychain_profile"
             echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+            echo "APPLE_KEYCHAIN_PROFILE=$keychain_profile" >> "$GITHUB_ENV"
           fi
           pnpm build
           pnpm exec electron-builder --config .build/electron-builder.release.json --mac dmg zip --arm64 --publish never
@@ -183,7 +190,9 @@ jobs:
             exit 1
           fi
           for dmg in "${dmgs[@]}"; do
-            if [[ -n "${APPLE_API_KEY_PATH:-}" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" ]]; then
+            if [[ -n "${APPLE_KEYCHAIN_PROFILE:-}" ]]; then
+              xcrun notarytool submit "$dmg" --keychain-profile "$APPLE_KEYCHAIN_PROFILE" --wait
+            elif [[ -n "${APPLE_API_KEY_PATH:-}" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" ]]; then
               xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
             elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
               xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
