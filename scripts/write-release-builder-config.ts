@@ -50,11 +50,11 @@ const config = {
     target: [
       {
         target: "dmg",
-        arch: ["arm64"]
+        arch: ["x64", "arm64"]
       },
       {
         target: "zip",
-        arch: ["arm64"]
+        arch: ["x64", "arm64"]
       }
     ]
   },

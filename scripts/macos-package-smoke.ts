@@ -15,23 +15,27 @@ if (process.platform !== "darwin") {
 }
 
 const root = process.cwd();
-const appPath = findPackagedApp(path.join(root, "release"));
-if (!appPath) throw new Error("Could not find Fallback.app under release/. Run pnpm package:dir or pnpm package:mac first.");
+const appPaths = findPackagedApps(path.join(root, "release"));
+if (appPaths.length === 0) throw new Error("Could not find Fallback.app under release/. Run pnpm package:dir or pnpm package:mac first.");
 
-console.log(`[smoke] found ${path.relative(root, appPath)}`);
-verifyPackagedRenderer(appPath);
+for (const appPath of appPaths) {
+  console.log(`[smoke] found ${path.relative(root, appPath)}`);
+  verifyPackagedRenderer(appPath);
 
-if (requireSigned) {
-  execFileSync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], { stdio: "inherit" });
-  console.log("[smoke] codesign verification ok");
+  if (requireSigned) {
+    execFileSync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], { stdio: "inherit" });
+    console.log("[smoke] codesign verification ok");
+  }
+
+  if (requireNotarized) {
+    execFileSync("spctl", ["--assess", "--type", "execute", "--verbose=2", appPath], { stdio: "inherit" });
+    console.log("[smoke] Gatekeeper assessment ok");
+  }
 }
 
-if (requireNotarized) {
-  execFileSync("spctl", ["--assess", "--type", "execute", "--verbose=2", appPath], { stdio: "inherit" });
-  console.log("[smoke] Gatekeeper assessment ok");
-}
-
-await launchSmoke(appPath);
+const launchAppPath = appPaths.sort((a, b) => scoreApp(b) - scoreApp(a))[0];
+if (!launchAppPath) throw new Error("Could not choose a packaged Fallback.app to launch.");
+await launchSmoke(launchAppPath);
 
 function verifyPackagedRenderer(appPath: string): void {
   const appAsarPath = path.join(appPath, "Contents", "Resources", "app.asar");
@@ -49,11 +53,11 @@ function verifyPackagedRenderer(appPath: string): void {
   console.log("[smoke] packaged renderer, CSP, and preload checks ok");
 }
 
-function findPackagedApp(directory: string): string | null {
-  if (!fs.existsSync(directory)) return null;
+function findPackagedApps(directory: string): string[] {
+  if (!fs.existsSync(directory)) return [];
   const candidates: string[] = [];
   visit(directory, candidates);
-  return candidates.sort((a, b) => scoreApp(b) - scoreApp(a))[0] ?? null;
+  return candidates.sort((a, b) => scoreApp(b) - scoreApp(a));
 }
 
 function visit(directory: string, candidates: string[]): void {
@@ -68,7 +72,8 @@ function visit(directory: string, candidates: string[]): void {
 }
 
 function scoreApp(appPath: string): number {
-  if (appPath.includes("mac-arm64")) return 100;
+  if (process.arch === "arm64" && appPath.includes("mac-arm64")) return 100;
+  if (process.arch === "x64" && appPath.includes("mac")) return appPath.includes("mac-arm64") ? 1 : 100;
   if (appPath.includes("mac")) return 80;
   return 1;
 }

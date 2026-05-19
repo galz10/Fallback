@@ -208,7 +208,7 @@ jobs:
           fi
           unset APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
           pnpm build
-          pnpm exec electron-builder --config .build/electron-builder.release.json --mac dmg zip --arm64 --publish never
+          pnpm exec electron-builder --config .build/electron-builder.release.json --mac dmg zip --x64 --arm64 --publish never
 
       - name: Notarize and staple macOS DMG
         env:

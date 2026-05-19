@@ -33,6 +33,9 @@ assert.match(releaseWorkflow, /release\/\*\.blockmap/);
 assert.match(releaseWorkflow, /release\/\*linux\*\.yml/);
 assert.match(releaseWorkflow, /FALLBACK_GITHUB_CLIENT_ID: \$\{\{ vars\.FALLBACK_GITHUB_CLIENT_ID/);
 assert.match(releaseWorkflow, /FALLBACK_REQUIRE_GITHUB_CLIENT_ID: "1"/);
+assert.match(releaseWorkflow, /--mac dmg zip --x64 --arm64 --publish never/);
+assert.match(releaseWorkflow, /--linux AppImage deb --x64 --publish never/);
+assert.match(releaseWorkflow, /pnpm package:linux:smoke/);
 assert.match(releaseWorkflow, /export CSC_LINK="\$cert"/);
 assert.match(releaseWorkflow, /export CSC_NAME="\$\{MACOS_CODESIGN_IDENTITY:-Developer ID Application\}"/);
 assert.match(releaseWorkflow, /openssl pkcs12/);
@@ -52,15 +55,19 @@ assert.match(releaseWorkflow, /unset APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_IS
 assert.doesNotMatch(macosNotarize, /process\.env\.APPLE_API_KEY\b/);
 assert.match(macosNotarize, /process\.env\.APPLE_KEYCHAIN_PROFILE/);
 assert.match(macosNotarize, /keychainProfile/);
-assert.match(readme, /production release matrix currently includes macOS arm64 and Linux x64/);
+assert.match(readme, /production release matrix currently includes macOS x64, macOS arm64, and Linux x64/);
 assert.match(readme, /Windows release artifacts are deferred/);
 assert.match(readme, /GitHub write-back actions are intentionally supported/);
 assert.match(readme, /Auto-update is intentionally disabled/);
 assert.match(releaseScript, /Updater asset contract/);
-assert.match(releaseScript, /notarized DMG/);
+assert.match(releaseScript, /notarized x64\/arm64 DMGs/);
+assert.match(releaseScript, /x64 AppImage, deb, latest-linux\.yml/);
 
 const buildConfigScript = await readFile("scripts/write-build-config.ts", "utf8");
 assert.match(buildConfigScript, /FALLBACK_REQUIRE_GITHUB_CLIENT_ID/);
 assert.match(buildConfigScript, /FALLBACK_GITHUB_CLIENT_ID is required for release builds/);
+
+const releaseBuilderConfigScript = await readFile("scripts/write-release-builder-config.ts", "utf8");
+assert.match(releaseBuilderConfigScript, /arch: \["x64", "arm64"\]/);
 
 console.log("App update UI wiring tests ok");

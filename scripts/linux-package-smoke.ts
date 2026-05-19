@@ -14,6 +14,14 @@ assert.match(linuxConfig.synopsis ?? "", /Local-first GitHub/);
 assert.match(linuxConfig.maintainer ?? "", /^Fallback <[^@\s]+@[^@\s]+\.[^@\s]+>$/, "Linux package maintainer email is required");
 assert.ok(linuxConfig.desktop?.entry?.StartupWMClass, "Linux desktop StartupWMClass is required");
 assert.deepEqual(linuxConfig.target?.map((target) => target.target).sort(), ["AppImage", "deb"].sort());
+assert.deepEqual(
+  linuxConfig.target
+    ?.map((target) => target.arch)
+    .flat()
+    .sort(),
+  ["x64", "x64"].sort(),
+  "Linux release targets must cover x64 AppImage and deb artifacts"
+);
 assert.ok(debConfig?.depends?.includes("git"), "deb package must depend on git");
 assert.ok(debConfig?.depends?.includes("libsecret-1-0"), "deb package must depend on libsecret");
 assert.ok(debConfig?.depends?.includes("xdg-utils"), "deb package must depend on xdg-utils");
