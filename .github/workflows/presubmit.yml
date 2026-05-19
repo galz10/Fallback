@@ -20,6 +20,8 @@ jobs:
   beta-check:
     name: beta-check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'presubmit-approval' || 'presubmit-auto' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false

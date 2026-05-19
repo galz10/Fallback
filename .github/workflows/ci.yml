@@ -16,6 +16,8 @@ jobs:
   verify:
     name: verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'presubmit-approval' || 'presubmit-auto' }}
     strategy:
       fail-fast: false
       matrix:
