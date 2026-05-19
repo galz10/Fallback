@@ -31,6 +31,8 @@ assert.match(releaseWorkflow, /release\/\*mac\*\.yml/);
 assert.match(releaseWorkflow, /release\/\*\.zip/);
 assert.match(releaseWorkflow, /release\/\*\.blockmap/);
 assert.match(releaseWorkflow, /release\/\*linux\*\.yml/);
+assert.match(releaseWorkflow, /FALLBACK_GITHUB_CLIENT_ID: \$\{\{ vars\.FALLBACK_GITHUB_CLIENT_ID/);
+assert.match(releaseWorkflow, /FALLBACK_REQUIRE_GITHUB_CLIENT_ID: "1"/);
 assert.match(releaseWorkflow, /export CSC_LINK="\$cert"/);
 assert.match(releaseWorkflow, /export CSC_NAME="\$\{MACOS_CODESIGN_IDENTITY:-Developer ID Application\}"/);
 assert.match(releaseWorkflow, /openssl pkcs12/);
@@ -56,5 +58,9 @@ assert.match(readme, /GitHub write-back actions are intentionally supported/);
 assert.match(readme, /Auto-update is intentionally disabled/);
 assert.match(releaseScript, /Updater asset contract/);
 assert.match(releaseScript, /notarized DMG/);
+
+const buildConfigScript = await readFile("scripts/write-build-config.ts", "utf8");
+assert.match(buildConfigScript, /FALLBACK_REQUIRE_GITHUB_CLIENT_ID/);
+assert.match(buildConfigScript, /FALLBACK_GITHUB_CLIENT_ID is required for release builds/);
 
 console.log("App update UI wiring tests ok");

@@ -12,12 +12,17 @@ const clientId =
   readEnvValue("FALLBACK_GITHUB_CLIENT_ID") ||
   readEnvValue("GITHUB_CLIENT_ID") ||
   "";
+const requireClientId = process.env.FALLBACK_REQUIRE_GITHUB_CLIENT_ID === "1";
 const updateRepository =
   process.env.FALLBACK_UPDATE_REPOSITORY ||
   process.env.GITHUB_REPOSITORY ||
   readEnvValue("FALLBACK_UPDATE_REPOSITORY") ||
   readEnvValue("GITHUB_REPOSITORY") ||
   "";
+
+if (requireClientId && !clientId) {
+  throw new Error("FALLBACK_GITHUB_CLIENT_ID is required for release builds.");
+}
 
 fs.writeFileSync(
   outputPath,

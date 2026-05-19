@@ -111,6 +111,8 @@ By default, Fallback stores its workspace at `~/Fallback` with the SQLite databa
 
 GitHub tokens are stored in OS secure storage through Keychain or the host keychain provider. The GitHub OAuth flow requests repository access so Fallback can sync private repo context and perform user-initiated comment and review write-back. Diagnostics exports are redacted by default and exclude repo names, org names, workspace paths, database paths, titles, bodies, comments, diffs, and check logs. The Settings screen has a separate confirmation-gated export when repo details are needed for support.
 
+Release builds require the public GitHub OAuth app client ID to be configured as the `FALLBACK_GITHUB_CLIENT_ID` GitHub Actions repository variable. The release workflow fails fast when this value is missing so packaged apps cannot ship with broken sign-in.
+
 ## Troubleshooting
 
 - If GitHub connection fails, disconnect and reconnect from Settings, then rerun a manual sync.
