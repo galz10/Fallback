@@ -6,6 +6,7 @@ const appUpdateService = await readFile("electron/main/app-update-service.ts", "
 const lifecycle = await readFile("electron/main/app/lifecycle.ts", "utf8");
 const releaseWorkflow = await readFile(".github/workflows/release.yml", "utf8");
 const releaseScript = await readFile("scripts/release.ts", "utf8");
+const macosNotarize = await readFile("scripts/notarize-macos.js", "utf8");
 const readme = await readFile("README.md", "utf8");
 
 assert.match(settingsView, /queryKey: \["appUpdate"\]/);
@@ -30,6 +31,9 @@ assert.match(releaseWorkflow, /release\/\*mac\*\.yml/);
 assert.match(releaseWorkflow, /release\/\*\.zip/);
 assert.match(releaseWorkflow, /release\/\*\.blockmap/);
 assert.match(releaseWorkflow, /release\/\*linux\*\.yml/);
+assert.match(releaseWorkflow, /export CSC_LINK="\$cert"/);
+assert.match(releaseWorkflow, /export APPLE_API_KEY_PATH="\$key_path"/);
+assert.doesNotMatch(macosNotarize, /process\.env\.APPLE_API_KEY\b/);
 assert.match(readme, /production release matrix currently includes macOS arm64 and Linux x64/);
 assert.match(readme, /Windows release artifacts are deferred/);
 assert.match(readme, /GitHub write-back actions are intentionally supported/);

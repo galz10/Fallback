@@ -151,6 +151,8 @@ jobs:
             echo "Missing macOS signing certificate secrets." >&2
             exit 1
           fi
+          export CSC_LINK="$cert"
+          export CSC_KEY_PASSWORD="$cert_password"
           echo "CSC_LINK=$cert" >> "$GITHUB_ENV"
           echo "CSC_KEY_PASSWORD=$cert_password" >> "$GITHUB_ENV"
           if [[ -n "$APPLE_API_KEY" ]]; then
@@ -158,6 +160,7 @@ jobs:
             mkdir -p "$key_dir"
             key_path="$key_dir/AuthKey_${APPLE_API_KEY_ID}.p8"
             printf '%s' "$APPLE_API_KEY" > "$key_path"
+            export APPLE_API_KEY_PATH="$key_path"
             echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
           fi
           pnpm build

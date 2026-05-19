@@ -4,7 +4,7 @@ import process from "node:process";
 export default async function notarizeMacos(context) {
   if (process.platform !== "darwin" || process.env.FALLBACK_NOTARIZE !== "1") return;
   const appPath = `${context.appOutDir}/${context.packager.appInfo.productFilename}.app`;
-  const appleApiKey = process.env.APPLE_API_KEY_PATH || process.env.APPLE_API_KEY;
+  const appleApiKey = process.env.APPLE_API_KEY_PATH;
   const appleApiKeyId = process.env.APPLE_API_KEY_ID;
   const appleApiIssuer = process.env.APPLE_API_ISSUER;
   const appleId = process.env.APPLE_ID;
