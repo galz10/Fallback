@@ -156,16 +156,30 @@ jobs:
           if ! printf '%s' "$cert" | base64 --decode > "$cert_file" 2>/dev/null; then
             printf '%s' "$cert" | base64 -D > "$cert_file"
           fi
-          cert_subject="$(
-            openssl pkcs12 -in "$cert_file" -passin "pass:$cert_password" -nokeys -clcerts 2>/dev/null |
-            openssl x509 -noout -subject 2>/dev/null
-          )"
-          if [[ -z "$cert_subject" ]]; then
+          cert_pem="$RUNNER_TEMP/fallback-macos-signing-certs.pem"
+          if ! openssl pkcs12 -in "$cert_file" -passin "pass:$cert_password" -nokeys -clcerts > "$cert_pem" 2>/dev/null; then
             echo "Could not inspect macOS signing certificate. Check the certificate secret and password." >&2
             exit 1
           fi
-          if [[ "$cert_subject" != *"Developer ID Application"* ]]; then
-            echo "macOS releases must use a Developer ID Application certificate. Found: $cert_subject" >&2
+          awk '
+            /-----BEGIN CERTIFICATE-----/ { n += 1; out = ENVIRON["RUNNER_TEMP"] "/fallback-macos-signing-cert-" n ".pem" }
+            out { print > out }
+            /-----END CERTIFICATE-----/ { out = "" }
+          ' "$cert_pem"
+          shopt -s nullglob
+          cert_parts=("$RUNNER_TEMP"/fallback-macos-signing-cert-*.pem)
+          if (( ${#cert_parts[@]} == 0 )); then
+            echo "Could not find any certificates in the macOS signing certificate secret." >&2
+            exit 1
+          fi
+          cert_subjects="$(
+            for cert_part in "${cert_parts[@]}"; do
+              openssl x509 -in "$cert_part" -noout -subject
+            done
+          )"
+          if [[ "$cert_subjects" != *"Developer ID Application"* ]]; then
+            echo "macOS releases must use a Developer ID Application certificate. Found:" >&2
+            echo "$cert_subjects" >&2
             exit 1
           fi
           export CSC_LINK="$cert"
