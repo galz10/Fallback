@@ -33,6 +33,8 @@ assert.match(releaseWorkflow, /release\/\*\.blockmap/);
 assert.match(releaseWorkflow, /release\/\*linux\*\.yml/);
 assert.match(releaseWorkflow, /export CSC_LINK="\$cert"/);
 assert.match(releaseWorkflow, /export CSC_NAME="\$\{MACOS_CODESIGN_IDENTITY:-Developer ID Application\}"/);
+assert.match(releaseWorkflow, /openssl pkcs12/);
+assert.match(releaseWorkflow, /Developer ID Application certificate/);
 assert.match(releaseWorkflow, /export APPLE_API_KEY_PATH="\$key_path"/);
 assert.match(releaseWorkflow, /xcrun notarytool store-credentials "\$keychain_profile"/);
 assert.match(releaseWorkflow, /--keychain-profile "\$APPLE_KEYCHAIN_PROFILE"/);
