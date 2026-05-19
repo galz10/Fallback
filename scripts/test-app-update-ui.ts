@@ -39,6 +39,8 @@ assert.match(releaseWorkflow, /Developer ID Application certificate/);
 assert.match(releaseWorkflow, /export APPLE_API_KEY_PATH="\$key_path"/);
 assert.match(releaseWorkflow, /xcrun notarytool store-credentials "\$keychain_profile"/);
 assert.match(releaseWorkflow, /--keychain-profile "\$APPLE_KEYCHAIN_PROFILE"/);
+assert.match(releaseWorkflow, /FALLBACK_NOTARIZE: "0"/);
+assert.match(releaseWorkflow, /unset APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER/);
 assert.doesNotMatch(macosNotarize, /process\.env\.APPLE_API_KEY\b/);
 assert.match(macosNotarize, /process\.env\.APPLE_KEYCHAIN_PROFILE/);
 assert.match(macosNotarize, /keychainProfile/);
