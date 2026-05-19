@@ -307,7 +307,7 @@ function printSummary(input: {
   console.log(`  Command preview: ${input.commandDryRun ? "yes" : "no"}`);
   console.log("");
   console.log("Updater asset contract");
-  console.log("  macOS:   signed DMG, ZIP payload, latest-mac.yml, blockmaps");
+  console.log("  macOS:   notarized DMG, ZIP payload, latest-mac.yml, blockmaps");
   console.log("  Linux:   AppImage, deb, checksums");
   console.log("");
 }

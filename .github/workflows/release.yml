@@ -271,7 +271,7 @@ jobs:
             fi
             xcrun stapler staple "$dmg"
             xcrun stapler validate "$dmg"
-            spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+            hdiutil verify "$dmg"
           done
 
       - name: Smoke signed macOS app

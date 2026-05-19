@@ -42,6 +42,9 @@ assert.match(releaseWorkflow, /--keychain-profile "\$APPLE_KEYCHAIN_PROFILE"/);
 assert.match(releaseWorkflow, /notarytool submit "\$dmg" "\$\{auth_args\[@\]\}" --output-format json --no-progress/);
 assert.match(releaseWorkflow, /notarytool wait "\$submission_id" "\$\{auth_args\[@\]\}" --timeout 20m/);
 assert.match(releaseWorkflow, /notarytool info "\$submission_id" "\$\{auth_args\[@\]\}" --output-format json/);
+assert.match(releaseWorkflow, /xcrun stapler validate "\$dmg"/);
+assert.match(releaseWorkflow, /hdiutil verify "\$dmg"/);
+assert.doesNotMatch(releaseWorkflow, /context:primary-signature/);
 assert.match(releaseWorkflow, /FALLBACK_NOTARIZE: "0"/);
 assert.match(releaseWorkflow, /unset APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER/);
 assert.doesNotMatch(macosNotarize, /process\.env\.APPLE_API_KEY\b/);
@@ -52,5 +55,6 @@ assert.match(readme, /Windows release artifacts are deferred/);
 assert.match(readme, /GitHub write-back actions are intentionally supported/);
 assert.match(readme, /Auto-update is intentionally disabled/);
 assert.match(releaseScript, /Updater asset contract/);
+assert.match(releaseScript, /notarized DMG/);
 
 console.log("App update UI wiring tests ok");

@@ -48,13 +48,13 @@ pnpm package:mac:unsigned
 
 The `.dmg` is written to `release/`. Unsigned builds are for local/internal testing only.
 
-Signed and notarized macOS release build:
+Signed-app and notarized macOS release build:
 
 ```bash
 pnpm package:mac
 ```
 
-`pnpm package:mac:release` is an alias for the same production command. The release build requires `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`.
+`pnpm package:mac:release` is an alias for the same production command. The release build requires `CSC_LINK`, `CSC_KEY_PASSWORD`, and Apple notarization credentials.
 
 Developer directory build:
 
