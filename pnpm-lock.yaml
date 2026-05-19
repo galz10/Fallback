@@ -48,8 +48,8 @@ importers:
         specifier: 7.9.0
         version: 7.9.0
       kysely:
-        specifier: 0.28.16
-        version: 0.28.16
+        specifier: 0.28.17
+        version: 0.28.17
       lucide-react:
         specifier: 1.11.0
         version: 1.11.0(react@19.2.5)
@@ -2723,8 +2723,8 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
-  kysely@0.28.16:
-    resolution: {integrity: sha512-3i5pmOiZvMDj00qhrIVbH0AnioVTx22DMP7Vn5At4yJO46iy+FM8Y/g61ltenLVSo3fiO8h8Q3QOFgf/gQ72ww==}
+  kysely@0.28.17:
+    resolution: {integrity: sha512-nbD8lB9EB3wNdMhOCdx5Li8DxnLbvKByylRLcJ1h+4SkrowVeECAyZlyiKMThF7xFdRz0jSQ2MoJr+wXux2y0Q==}
     engines: {node: '>=20.0.0'}
 
   lazy-val@1.0.5:
@@ -6468,7 +6468,7 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  kysely@0.28.16: {}
+  kysely@0.28.17: {}
 
   lazy-val@1.0.5: {}
 
