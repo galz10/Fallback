@@ -226,13 +226,47 @@ jobs:
           fi
           for dmg in "${dmgs[@]}"; do
             if [[ -n "${APPLE_KEYCHAIN_PROFILE:-}" ]]; then
-              xcrun notarytool submit "$dmg" --keychain-profile "$APPLE_KEYCHAIN_PROFILE" --wait
+              auth_args=(--keychain-profile "$APPLE_KEYCHAIN_PROFILE")
             elif [[ -n "${APPLE_API_KEY_PATH:-}" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" ]]; then
-              xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+              auth_args=(--key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER")
             elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
-              xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+              auth_args=(--apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID")
             else
               echo "Missing macOS notarization credentials for DMG." >&2
+              exit 1
+            fi
+            submit_json="$(xcrun notarytool submit "$dmg" "${auth_args[@]}" --output-format json --no-progress)"
+            submission_id="$(node -e 'let data = ""; process.stdin.on("data", chunk => data += chunk); process.stdin.on("end", () => console.log(JSON.parse(data).id));' <<< "$submit_json")"
+            if [[ -z "$submission_id" ]]; then
+              echo "Could not read Apple notarization submission ID for $dmg." >&2
+              exit 1
+            fi
+            echo "Waiting for Apple notarization submission $submission_id."
+            notarized=0
+            for attempt in 1 2 3 4 5; do
+              if xcrun notarytool wait "$submission_id" "${auth_args[@]}" --timeout 20m; then
+                notarized=1
+                break
+              fi
+              info_json="$RUNNER_TEMP/notary-info-${submission_id}-${attempt}.json"
+              if xcrun notarytool info "$submission_id" "${auth_args[@]}" --output-format json > "$info_json"; then
+                status="$(node -e 'const fs = require("node:fs"); console.log(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).status ?? "");' "$info_json")"
+                if [[ "$status" == "Accepted" ]]; then
+                  notarized=1
+                  break
+                fi
+                if [[ "$status" == "Invalid" || "$status" == "Rejected" ]]; then
+                  cat "$info_json" >&2
+                  exit 1
+                fi
+                echo "Apple notarization status is '$status'; retrying wait."
+              else
+                echo "Apple notarization status check failed; retrying wait."
+              fi
+              sleep $((attempt * 20))
+            done
+            if (( notarized != 1 )); then
+              echo "Apple notarization did not complete after retries for submission $submission_id." >&2
               exit 1
             fi
             xcrun stapler staple "$dmg"
