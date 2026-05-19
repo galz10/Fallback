@@ -11,6 +11,7 @@ const requireArtifacts = process.argv.includes("--require-artifacts");
 assert.ok(linuxConfig, "electron-builder linux config is required");
 assert.equal(linuxConfig.category, "Development");
 assert.match(linuxConfig.synopsis ?? "", /Local-first GitHub/);
+assert.match(linuxConfig.maintainer ?? "", /^Fallback <[^@\s]+@[^@\s]+\.[^@\s]+>$/, "Linux package maintainer email is required");
 assert.ok(linuxConfig.desktop?.entry?.StartupWMClass, "Linux desktop StartupWMClass is required");
 assert.deepEqual(linuxConfig.target?.map((target) => target.target).sort(), ["AppImage", "deb"].sort());
 assert.ok(debConfig?.depends?.includes("git"), "deb package must depend on git");

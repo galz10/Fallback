@@ -163,6 +163,7 @@
       "category": "Development",
       "synopsis": "Local-first GitHub workbench",
       "description": "Fallback keeps GitHub work, local changes, and branch state coherent when repo work gets messy.",
+      "maintainer": "Fallback <galz100@gmail.com>",
       "desktop": {
         "entry": {
           "Name": "Fallback",
