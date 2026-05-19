@@ -1,0 +1,18 @@
+# High-risk repository and release controls.
+/.github/** @galz10
+/package.json @galz10
+/pnpm-lock.yaml @galz10
+/.npmrc @galz10
+/pnpm-workspace.yaml @galz10
+/SECURITY.md @galz10
+
+# Electron privileged process boundaries.
+/electron/main/** @galz10
+/electron/preload/** @galz10
+
+# Release, signing, notarization, and package verification scripts.
+/scripts/release.ts @galz10
+/scripts/write-release-builder-config.ts @galz10
+/scripts/notarize-macos.js @galz10
+/scripts/macos-package-smoke.ts @galz10
+/scripts/linux-package-smoke.ts @galz10
