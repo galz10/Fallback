@@ -32,9 +32,9 @@ GitHub owns a lot of working memory: review threads, issue decisions, check stat
 
 ## Status
 
-Fallback is moving from private beta prototype toward production release readiness. The canonical development toolchain is Node 24.x with pnpm 10.33.x, pinned by `package.json`, `.node-version`, and `.nvmrc`. The production release matrix includes macOS arm64, Windows x64, and Linux x64 artifacts, with platform-specific signing or smoke validation in the release workflow.
+Fallback is moving from private beta prototype toward production release readiness. The canonical development toolchain is Node 24.x with pnpm 10.33.x, pinned by `package.json`, `.node-version`, and `.nvmrc`. The production release matrix currently includes macOS arm64 and Linux x64 artifacts, with platform-specific signing or smoke validation in the release workflow.
 
-Apple Developer ID signing and notarization are configured for macOS release tags. Windows releases require configured Authenticode signing through Azure Trusted Signing or a certificate fallback, and Linux releases ship with AppImage/deb smoke coverage. Auto-update is intentionally disabled for the first production release; users install explicit GitHub Release artifacts until an update channel is selected. GitHub write-back actions are intentionally supported for comments and PR reviews, using user-confirmed actions and operation records. SQLCipher remains deferred.
+Apple Developer ID signing and notarization are configured for macOS release tags, and Linux releases ship with AppImage/deb smoke coverage. Windows release artifacts are deferred until there is clear demand and a signing path is configured. Auto-update is intentionally disabled for the first production release; users install explicit GitHub Release artifacts until an update channel is selected. GitHub write-back actions are intentionally supported for comments and PR reviews, using user-confirmed actions and operation records. SQLCipher remains deferred.
 
 ## Install
 
@@ -62,10 +62,9 @@ Developer directory build:
 pnpm package
 ```
 
-Windows and Linux release builds:
+Linux release build:
 
 ```bash
-pnpm package:win
 pnpm package:linux
 ```
 

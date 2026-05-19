@@ -308,7 +308,6 @@ function printSummary(input: {
   console.log("");
   console.log("Updater asset contract");
   console.log("  macOS:   signed DMG, ZIP payload, latest-mac.yml, blockmaps");
-  console.log("  Windows: signed NSIS EXE, latest.yml, blockmaps");
   console.log("  Linux:   AppImage, deb, checksums");
   console.log("");
 }

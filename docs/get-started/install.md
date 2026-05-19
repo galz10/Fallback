@@ -1,6 +1,6 @@
 # Install
 
-Fallback is a desktop app for repository work. The current project builds release packages for macOS, Windows, and Linux, with macOS as the main early testing path.
+Fallback is a desktop app for repository work. The current project builds release packages for macOS and Linux, with macOS as the main early testing path. Windows release artifacts are deferred until there is clear demand and a signing path is configured.
 
 ## Before You Start
 

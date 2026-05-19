@@ -206,79 +206,6 @@ jobs:
             release/*.blockmap
           if-no-files-found: error
 
-  build_windows:
-    name: Build Windows
-    runs-on: windows-latest
-    needs: preflight
-    environment: release
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.preflight.outputs.target_sha }}
-          fetch-depth: 0
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.2
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Prepare release builder config
-        env:
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          AZURE_TRUSTED_SIGNING_TIMESTAMP_RFC3161: ${{ vars.AZURE_TRUSTED_SIGNING_TIMESTAMP_RFC3161 }}
-          WINDOWS_PUBLISHER_NAME: ${{ vars.WINDOWS_PUBLISHER_NAME }}
-        run: pnpm release:builder-config -- --version "${{ needs.preflight.outputs.version }}" --repository "${{ github.repository }}"
-
-      - name: Build signed Windows artifacts
-        shell: pwsh
-        env:
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_CLIENT_CERTIFICATE_PATH: ${{ secrets.AZURE_CLIENT_CERTIFICATE_PATH }}
-          AZURE_CLIENT_CERTIFICATE_PASSWORD: ${{ secrets.AZURE_CLIENT_CERTIFICATE_PASSWORD }}
-          AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: ${{ secrets.AZURE_CLIENT_SEND_CERTIFICATE_CHAIN }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          WINDOWS_PUBLISHER_NAME: ${{ vars.WINDOWS_PUBLISHER_NAME }}
-          WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          $hasAzureSigningConfig = $env:AZURE_TRUSTED_SIGNING_ENDPOINT -and $env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME -and $env:AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME -and $env:WINDOWS_PUBLISHER_NAME
-          $hasAzureAuth = $env:AZURE_TENANT_ID -and $env:AZURE_CLIENT_ID -and ($env:AZURE_CLIENT_SECRET -or $env:AZURE_CLIENT_CERTIFICATE_PATH)
-          if ($hasAzureSigningConfig) {
-            if (-not $hasAzureAuth) {
-              throw "Azure Trusted Signing is configured, but Azure auth is incomplete. Set AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET or AZURE_CLIENT_CERTIFICATE_PATH."
-            }
-            Write-Host "Using Azure Trusted Signing for Windows artifacts."
-          } elseif ($env:WINDOWS_CERTIFICATE_PFX_BASE64 -and $env:WINDOWS_CERTIFICATE_PASSWORD) {
-            Write-Host "Using fallback PFX signing for Windows artifacts."
-            "CSC_LINK=$env:WINDOWS_CERTIFICATE_PFX_BASE64" | Out-File -FilePath $env:GITHUB_ENV -Append
-            "CSC_KEY_PASSWORD=$env:WINDOWS_CERTIFICATE_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Append
-          } else {
-            throw "Missing Windows signing configuration. Configure Azure Trusted Signing secrets/variables, or fallback WINDOWS_CERTIFICATE_PFX_BASE64 and WINDOWS_CERTIFICATE_PASSWORD."
-          }
-          pnpm build
-          pnpm exec electron-builder --config .build/electron-builder.release.json --win nsis --x64 --publish never
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fallback-windows-${{ needs.preflight.outputs.tag }}
-          path: |
-            release/*.exe
-            release/*.yml
-            release/*.blockmap
-          if-no-files-found: error
-
   build_linux:
     name: Build Linux
     runs-on: ubuntu-latest
@@ -330,7 +257,6 @@ jobs:
     needs:
       - preflight
       - build_macos
-      - build_windows
       - build_linux
     permissions:
       contents: write
