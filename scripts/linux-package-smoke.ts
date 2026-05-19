@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { access, readdir } from "node:fs/promises";
 import { promisify } from "node:util";
 import packageJson from "../package.json" with { type: "json" };
@@ -35,12 +35,44 @@ assert.ok(deb, "Build a deb with pnpm package:linux before Linux boot smoke");
 await access(`release/${deb}`);
 
 const xvfb = await commandExists("xvfb-run");
-const runner = xvfb
-  ? ["xvfb-run", "-a", `release/${appImage}`, "--no-sandbox", "--version"]
-  : [`release/${appImage}`, "--no-sandbox", "--version"];
-await execFileAsync(runner[0]!, runner.slice(1), { timeout: 30_000 });
+const runner = xvfb ? ["xvfb-run", "-a", `release/${appImage}`, "--no-sandbox"] : [`release/${appImage}`, "--no-sandbox"];
+await launchSmoke(runner);
 
 console.log("Linux package boot smoke ok");
+
+function launchSmoke(runner: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(runner[0]!, runner.slice(1), {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        FALLBACK_PERF_SMOKE: "1"
+      },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("Linux packaged app smoke timed out after 30s."));
+    }, 30_000);
+    child.stdout.on("data", (chunk: Buffer) => processOutput(chunk));
+    child.stderr.on("data", (chunk: Buffer) => processOutput(chunk));
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timeout);
+      if (code && code !== 0) reject(new Error(`Linux packaged app exited with code ${code}.`));
+      else resolve();
+    });
+  });
+}
+
+function processOutput(chunk: Buffer): void {
+  for (const line of chunk.toString("utf8").split(/\r?\n/)) {
+    if (line.includes("[perf]")) console.log(line);
+  }
+}
 
 async function commandExists(command: string): Promise<boolean> {
   try {
