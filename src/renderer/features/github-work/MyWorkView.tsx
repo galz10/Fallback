@@ -5,7 +5,7 @@ import {
   GitPullRequestIcon as GitHubPullRequestIcon,
   IssueOpenedIcon as GitHubIssueOpenedIcon
 } from "@primer/octicons-react";
-import { Archive, BellOff, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, MoreHorizontal } from "lucide-react";
+import { Archive, BellOff, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, MoreHorizontal, RefreshCw } from "lucide-react";
 import type { AuthState } from "../../../shared/domain/auth";
 import type { AttentionItem, AttentionLane } from "../../../shared/attention";
 import { myWorkLaneCopy, myWorkLaneOrder } from "../../../shared/product-coherence";
@@ -22,12 +22,15 @@ import {
   type EntityQueryKind,
   type WorkPriorityGroupId
 } from "./work-query-language";
-import { MyWorkSearchInput } from "./EntitySearchInput";
+import { MyWorkSearchInput, SimpleSearchInput } from "./EntitySearchInput";
+import { MyPullRequestRow } from "./MyPullRequestRow";
+import { authoredMyPullRequests, filterMyPullRequests, myPullRequestStatusCounts } from "./my-pull-requests";
 
 const ENTITY_PAGE_SIZE = 50;
 const ENTITY_LIST_STALE_TIME_MS = 5 * 60_000;
 const ENTITY_LIST_GC_TIME_MS = 30 * 60_000;
 const myWorkLanes: Array<{ id: AttentionLane; label: string }> = myWorkLaneOrder.map((id) => ({ id, label: myWorkLaneCopy[id].label }));
+type MyWorkTabId = AttentionLane | "my_prs";
 
 function WorkItemTypeIcon({ kind, state = "open" }: { kind: EntityQueryKind; state?: string }) {
   const iconClass = kind === "pr" ? "text-purple-900" : state === "closed" ? "text-red-900" : "text-green-900";
@@ -54,6 +57,8 @@ export function MyWorkView({
   const [query, setQuery] = useState("");
   const lane = useAppPreferencesStore((state) => state.myWorkLane);
   const setLane = useAppPreferencesStore((state) => state.setMyWorkLane);
+  const [activeTab, setActiveTab] = useState<MyWorkTabId>("my_prs");
+  const [userSelectedTab, setUserSelectedTab] = useState(false);
   const [page, setPage] = useState(1);
   const [collapsedGroups, setCollapsedGroups] = useState<Partial<Record<WorkPriorityGroupId, boolean>>>({ low_priority: true });
   const queryClient = useQueryClient();
@@ -63,6 +68,14 @@ export function MyWorkView({
     queryFn: () => window.fallback.notifications.list({ surface: "my_work", lane, limit: 250 }),
     enabled: auth.status === "connected",
     refetchInterval: 60_000,
+    staleTime: ENTITY_LIST_STALE_TIME_MS,
+    gcTime: ENTITY_LIST_GC_TIME_MS,
+    refetchOnWindowFocus: false
+  });
+  const { data: myPrs = [], isFetching: myPrsFetching } = useQuery({
+    queryKey: ["myPrs", authAccountKey],
+    queryFn: window.fallback.prs.listMine,
+    enabled: auth.status === "connected",
     staleTime: ENTITY_LIST_STALE_TIME_MS,
     gcTime: ENTITY_LIST_GC_TIME_MS,
     refetchOnWindowFocus: false
@@ -98,22 +111,51 @@ export function MyWorkView({
     mutationFn: (id: string) => window.fallback.notifications.unmute(id),
     onSuccess: () => invalidateAttentionQueries(queryClient)
   });
+  const refreshMyPrs = useMutation({
+    mutationFn: window.fallback.prs.refreshMine,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["myPrs"] }),
+        queryClient.invalidateQueries({ queryKey: ["myWorkAttention"] })
+      ]);
+    }
+  });
+  const login = auth.status === "connected" ? auth.login : undefined;
+  const authoredMyPrs = useMemo(() => authoredMyPullRequests(myPrs, login), [login, myPrs]);
+  const activeAuthoredMyPrs = useMemo(() => filterMyPullRequests(myPrs, login, ""), [login, myPrs]);
+  const myPrStatusCounts = useMemo(() => myPullRequestStatusCounts(authoredMyPrs), [authoredMyPrs]);
   const visible = useMemo(() => {
     const parsed = parseWorkQuery(query);
     const filtered = allItems.filter((item) => matchesWorkQuery(item, parsed));
     return [...filtered].sort(compareWorkItems);
   }, [allItems, query]);
-  const pageRows = useMemo(() => paginateItems(visible, page, ENTITY_PAGE_SIZE), [page, visible]);
-  const groupedPageRows = useMemo(() => groupWorkRows(pageRows), [pageRows]);
-  const loading = isFetching && allItems.length === 0;
-  const needsMeCount = counts[0]?.length ?? 0;
+  const visibleMyPrs = useMemo(() => filterMyPullRequests(myPrs, login, query), [login, myPrs, query]);
+  const laneCounts = useMemo(() => counts.map((items) => items.length), [counts]);
+  const workPageRows = useMemo(() => paginateItems(visible, page, ENTITY_PAGE_SIZE), [page, visible]);
+  const prPageRows = useMemo(() => paginateItems(visibleMyPrs, page, ENTITY_PAGE_SIZE), [page, visibleMyPrs]);
+  const groupedPageRows = useMemo(() => groupWorkRows(workPageRows), [workPageRows]);
+  const loading = activeTab === "my_prs" ? myPrsFetching && authoredMyPrs.length === 0 : isFetching && allItems.length === 0;
+  const needsMeCount = laneCounts[0] ?? 0;
   const laneEmptyCopy = myWorkLaneCopy[lane];
   const canCollapseGroups = query.trim() === "";
+  const activeItemCount = activeTab === "my_prs" ? visibleMyPrs.length : visible.length;
 
-  useEffect(() => setPage(1), [auth.status, authAccountKey, lane, query]);
+  useEffect(() => setPage(1), [activeTab, auth.status, authAccountKey, lane, query]);
   useEffect(() => {
-    setPage((current) => Math.min(current, pageCountFor(visible.length, ENTITY_PAGE_SIZE)));
-  }, [visible.length]);
+    if (userSelectedTab || auth.status !== "connected" || myPrsFetching) return;
+    if (activeAuthoredMyPrs.length > 0) {
+      setActiveTab("my_prs");
+      return;
+    }
+    setLane("needs_me");
+    setActiveTab("needs_me");
+  }, [activeAuthoredMyPrs.length, auth.status, myPrsFetching, setLane, userSelectedTab]);
+  useEffect(() => {
+    if (activeTab !== "my_prs") setActiveTab(lane);
+  }, [activeTab, lane]);
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCountFor(activeItemCount, ENTITY_PAGE_SIZE)));
+  }, [activeItemCount]);
 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-7">
@@ -126,94 +168,165 @@ export function MyWorkView({
             </p>
           </div>
           <span className="shrink-0 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-1 font-mono text-xs text-neutral-500">
-            {loading ? "Loading..." : `${compactCount(visible.length)} items`}
+            {loading ? "Loading..." : `${compactCount(activeItemCount)} items`}
           </span>
         </div>
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,auto)_minmax(260px,1fr)]">
           <div className="inline-flex min-w-0 rounded-lg border border-white/[0.08] bg-[#070708] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <button
+              type="button"
+              onClick={() => {
+                setUserSelectedTab(true);
+                setActiveTab("my_prs");
+              }}
+              className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                activeTab === "my_prs"
+                  ? "bg-white/[0.08] text-neutral-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
+                  : "text-neutral-500 hover:bg-white/[0.04] hover:text-neutral-300"
+              }`}
+            >
+              My PRs
+              {activeAuthoredMyPrs.length ? (
+                <span className="ml-1 font-mono text-[12px] text-neutral-600">{compactCount(activeAuthoredMyPrs.length)}</span>
+              ) : null}
+            </button>
             {myWorkLanes.map((item, index) => (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setLane(item.id)}
+                onClick={() => {
+                  setUserSelectedTab(true);
+                  setActiveTab(item.id);
+                  setLane(item.id);
+                }}
                 className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                  lane === item.id
+                  activeTab === item.id
                     ? "bg-white/[0.08] text-neutral-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
                     : "text-neutral-500 hover:bg-white/[0.04] hover:text-neutral-300"
                 }`}
               >
                 {item.label}
-                {counts[index]?.length ? (
-                  <span className="ml-1 font-mono text-[12px] text-neutral-600">{compactCount(counts[index]!.length)}</span>
+                {laneCounts[index] ? (
+                  <span className="ml-1 font-mono text-[12px] text-neutral-600">{compactCount(laneCounts[index] ?? 0)}</span>
                 ) : null}
               </button>
             ))}
           </div>
-          <MyWorkSearchInput value={query} onChange={setQuery} items={allItems} />
+          {activeTab === "my_prs" ? (
+            <SimpleSearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search My PRs"
+              ariaLabel="Search My PRs"
+              items={authoredMyPrs}
+              login={login}
+              kinds={["pr"]}
+            />
+          ) : (
+            <MyWorkSearchInput value={query} onChange={setQuery} items={allItems} />
+          )}
         </div>
 
         <div className="overflow-hidden rounded-lg border border-white/[0.08] bg-[#050506] shadow-[0_1px_0_rgba(255,255,255,0.04),0_18px_44px_rgba(0,0,0,0.22)]">
-          {auth.status !== "connected" && visible.length === 0 && (
-            <div className="px-4 py-8 text-center text-neutral-500 text-sm">Connect GitHub to build your work queue.</div>
-          )}
-          {auth.status === "connected" && allItems.length === 0 && !loading && (
-            <div className="px-4 py-8 text-center text-neutral-500 text-sm">
-              <div className="font-medium text-neutral-300">{laneEmptyCopy.emptyTitle}</div>
-              <div className="mt-1 text-xs">{laneEmptyCopy.emptyDetail}</div>
-            </div>
-          )}
-          {allItems.length > 0 && visible.length === 0 && (
-            <div className="px-4 py-8 text-center text-neutral-500 text-sm">No work items match this search.</div>
-          )}
-          {groupedPageRows.map(({ group, rows }) => (
-            <React.Fragment key={group.id}>
-              <button
-                type="button"
-                onClick={() => setCollapsedGroups((groups) => ({ ...groups, [group.id]: !groups[group.id] }))}
-                className="flex w-full items-center justify-between gap-3 border-b border-white/[0.06] bg-white/[0.025] px-4 py-2.5 text-left font-sans text-[13px] leading-5 text-neutral-500 transition-colors hover:bg-white/[0.045] focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-neutral-600"
-                aria-expanded={!collapsedGroups[group.id] || !canCollapseGroups}
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  {collapsedGroups[group.id] && canCollapseGroups ? (
-                    <ChevronRight className="-ml-1 h-3.5 w-3.5 text-neutral-500" />
-                  ) : (
-                    <ChevronDown className="-ml-1 h-3.5 w-3.5 text-neutral-500" />
-                  )}
-                  {group.priorityLabel && <span className="text-[13px] font-medium text-neutral-500">{group.priorityLabel}</span>}
-                  <span className="text-[13px] font-medium text-neutral-400">{group.label}</span>
+          {activeTab === "my_prs" ? (
+            <>
+              <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] bg-white/[0.025] px-4 py-2.5 text-[13px] text-neutral-500">
+                <span className="min-w-0 truncate">
+                  {myPrsFetching && authoredMyPrs.length === 0
+                    ? "Loading authored PRs..."
+                    : `${compactCount(myPrStatusCounts.open)} open, ${compactCount(myPrStatusCounts.draft)} draft, ${compactCount(
+                        myPrStatusCounts.closed
+                      )} closed`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => refreshMyPrs.mutate()}
+                  disabled={auth.status !== "connected" || refreshMyPrs.isPending}
+                  title={refreshMyPrs.isPending ? "Refreshing My PRs" : "Refresh My PRs"}
+                  aria-label={refreshMyPrs.isPending ? "Refreshing My PRs" : "Refresh My PRs"}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-600"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${refreshMyPrs.isPending ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+              {auth.status !== "connected" && (
+                <div className="px-4 py-8 text-center text-sm text-neutral-500">Connect GitHub to see your PRs.</div>
+              )}
+              {auth.status === "connected" && authoredMyPrs.length === 0 && !myPrsFetching && (
+                <div className="px-4 py-8 text-center text-sm text-neutral-500">No authored PRs are cached yet.</div>
+              )}
+              {authoredMyPrs.length > 0 && visibleMyPrs.length === 0 && (
+                <div className="px-4 py-8 text-center text-sm text-neutral-500">No authored PRs match this search.</div>
+              )}
+              {prPageRows.map((pr) => (
+                <MyPullRequestRow key={pr.id} pr={pr} onClick={() => onPrClick({ repoId: pr.repoId, number: pr.number })} />
+              ))}
+            </>
+          ) : (
+            <>
+              {auth.status !== "connected" && visible.length === 0 && (
+                <div className="px-4 py-8 text-center text-neutral-500 text-sm">Connect GitHub to build your work queue.</div>
+              )}
+              {auth.status === "connected" && allItems.length === 0 && !loading && (
+                <div className="px-4 py-8 text-center text-neutral-500 text-sm">
+                  <div className="font-medium text-neutral-300">{laneEmptyCopy.emptyTitle}</div>
+                  <div className="mt-1 text-xs">{laneEmptyCopy.emptyDetail}</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-medium text-neutral-500">
-                    {collapsedGroups[group.id] && canCollapseGroups ? "Show" : "Hide"}
-                  </span>
-                  <span className="text-[13px] font-medium text-neutral-500">{compactCount(rows.length)}</span>
-                </div>
-              </button>
-              {(!collapsedGroups[group.id] || !canCollapseGroups) &&
-                rows.map((item) => (
-                  <AttentionWorkRow
-                    key={item.id}
-                    item={item}
-                    onClick={() =>
-                      item.entityType === "pull_request" && item.number
-                        ? onPrClick({ repoId: item.repoId, number: item.number })
-                        : item.entityType === "issue" && item.number
-                          ? onIssueClick({ repoId: item.repoId, number: item.number })
-                          : item.htmlUrl
-                            ? void window.fallback.shell.openExternal(item.htmlUrl)
-                            : undefined
-                    }
-                    onDone={() => (item.doneAt ? undoDone.mutate(item.id) : markDone.mutate(item.id))}
-                    onSnoozeUntil={(until) =>
-                      item.snoozedUntil ? unsnooze.mutate(item.id) : snooze.mutate({ id: item.id, until: until ?? tomorrowIso() })
-                    }
-                    onMute={() => (item.muted ? unmute.mutate(item.id) : mute.mutate(item.id))}
-                  />
-                ))}
-            </React.Fragment>
-          ))}
-          <PaginationFooter page={page} pageSize={ENTITY_PAGE_SIZE} total={visible.length} itemLabel="items" onPageChange={setPage} />
+              )}
+              {allItems.length > 0 && visible.length === 0 && (
+                <div className="px-4 py-8 text-center text-neutral-500 text-sm">No work items match this search.</div>
+              )}
+              {groupedPageRows.map(({ group, rows }) => (
+                <React.Fragment key={group.id}>
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedGroups((groups) => ({ ...groups, [group.id]: !groups[group.id] }))}
+                    className="flex w-full items-center justify-between gap-3 border-b border-white/[0.06] bg-white/[0.025] px-4 py-2.5 text-left font-sans text-[13px] leading-5 text-neutral-500 transition-colors hover:bg-white/[0.045] focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-neutral-600"
+                    aria-expanded={!collapsedGroups[group.id] || !canCollapseGroups}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      {collapsedGroups[group.id] && canCollapseGroups ? (
+                        <ChevronRight className="-ml-1 h-3.5 w-3.5 text-neutral-500" />
+                      ) : (
+                        <ChevronDown className="-ml-1 h-3.5 w-3.5 text-neutral-500" />
+                      )}
+                      {group.priorityLabel && <span className="text-[13px] font-medium text-neutral-500">{group.priorityLabel}</span>}
+                      <span className="text-[13px] font-medium text-neutral-400">{group.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-neutral-500">
+                        {collapsedGroups[group.id] && canCollapseGroups ? "Show" : "Hide"}
+                      </span>
+                      <span className="text-[13px] font-medium text-neutral-500">{compactCount(rows.length)}</span>
+                    </div>
+                  </button>
+                  {(!collapsedGroups[group.id] || !canCollapseGroups) &&
+                    rows.map((item) => (
+                      <AttentionWorkRow
+                        key={item.id}
+                        item={item}
+                        onClick={() =>
+                          item.entityType === "pull_request" && item.number
+                            ? onPrClick({ repoId: item.repoId, number: item.number })
+                            : item.entityType === "issue" && item.number
+                              ? onIssueClick({ repoId: item.repoId, number: item.number })
+                              : item.htmlUrl
+                                ? void window.fallback.shell.openExternal(item.htmlUrl)
+                                : undefined
+                        }
+                        onDone={() => (item.doneAt ? undoDone.mutate(item.id) : markDone.mutate(item.id))}
+                        onSnoozeUntil={(until) =>
+                          item.snoozedUntil ? unsnooze.mutate(item.id) : snooze.mutate({ id: item.id, until: until ?? tomorrowIso() })
+                        }
+                        onMute={() => (item.muted ? unmute.mutate(item.id) : mute.mutate(item.id))}
+                      />
+                    ))}
+                </React.Fragment>
+              ))}
+            </>
+          )}
+          <PaginationFooter page={page} pageSize={ENTITY_PAGE_SIZE} total={activeItemCount} itemLabel="items" onPageChange={setPage} />
         </div>
       </div>
     </div>
