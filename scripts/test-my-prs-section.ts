@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import type { PullRequestSummary } from "../src/shared/domain/github-work.js";
 import {
+  authoredMyPullRequests,
   filterMyPullRequests,
-  myPullRequestKey,
   myPullRequestStatusCounts
 } from "../src/renderer/features/github-work/my-pull-requests.js";
 
@@ -66,17 +66,32 @@ const prs: PullRequestSummary[] = [
   })
 ];
 
-const mine = filterMyPullRequests(prs, "mona");
-const counts = myPullRequestStatusCounts(mine);
+const authored = authoredMyPullRequests(prs, "mona");
+const activeMine = filterMyPullRequests(prs, "mona", "");
+const closedMine = filterMyPullRequests(prs, "mona", "is:closed");
+const allMine = filterMyPullRequests(prs, "mona", "is:all");
+const repoQualifiedMine = filterMyPullRequests(prs, "mona", "repo:octo/repo type:pr");
+const counts = myPullRequestStatusCounts(authored);
 
 assert.deepEqual(
-  mine.map((item) => item.number),
+  activeMine.map((item) => item.number),
+  [8, 2]
+);
+assert.deepEqual(
+  closedMine.map((item) => item.number),
+  [6]
+);
+assert.deepEqual(
+  allMine.map((item) => item.number),
   [6, 8, 2]
+);
+assert.deepEqual(
+  repoQualifiedMine.map((item) => item.number),
+  [8, 2]
 );
 assert.equal(counts.open, 1);
 assert.equal(counts.draft, 1);
 assert.equal(counts.closed, 1);
-assert.equal(myPullRequestKey(mine[0]!), "repo:6");
 
 console.log("My PRs section tests ok");
 

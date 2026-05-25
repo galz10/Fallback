@@ -7,7 +7,6 @@ import {
 } from "@primer/octicons-react";
 import { Archive, BellOff, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, MoreHorizontal, RefreshCw } from "lucide-react";
 import type { AuthState } from "../../../shared/domain/auth";
-import type { PullRequestSummary } from "../../../shared/domain/github-work";
 import type { AttentionItem, AttentionLane } from "../../../shared/attention";
 import { myWorkLaneCopy, myWorkLaneOrder } from "../../../shared/product-coherence";
 import { pageCountFor, paginateItems, PaginationFooter } from "../../components/PaginationFooter";
@@ -23,8 +22,9 @@ import {
   type EntityQueryKind,
   type WorkPriorityGroupId
 } from "./work-query-language";
-import { MyWorkSearchInput } from "./EntitySearchInput";
-import { filterMyPullRequests, myPullRequestKey, myPullRequestStatusCounts } from "./my-pull-requests";
+import { MyWorkSearchInput, SimpleSearchInput } from "./EntitySearchInput";
+import { MyPullRequestRow } from "./MyPullRequestRow";
+import { authoredMyPullRequests, filterMyPullRequests, myPullRequestStatusCounts } from "./my-pull-requests";
 
 const ENTITY_PAGE_SIZE = 50;
 const ENTITY_LIST_STALE_TIME_MS = 5 * 60_000;
@@ -121,21 +121,21 @@ export function MyWorkView({
     }
   });
   const login = auth.status === "connected" ? auth.login : undefined;
-  const authoredMyPrs = useMemo(() => filterMyPullRequests(myPrs, login), [login, myPrs]);
-  const authoredMyPrKeys = useMemo(() => new Set(authoredMyPrs.map(myPullRequestKey)), [authoredMyPrs]);
+  const authoredMyPrs = useMemo(() => authoredMyPullRequests(myPrs, login), [login, myPrs]);
+  const activeAuthoredMyPrs = useMemo(() => filterMyPullRequests(myPrs, login, ""), [login, myPrs]);
   const myPrStatusCounts = useMemo(() => myPullRequestStatusCounts(authoredMyPrs), [authoredMyPrs]);
-  const workItems = useMemo(() => withoutAuthoredPrAttentionItems(allItems, authoredMyPrKeys), [allItems, authoredMyPrKeys]);
   const visible = useMemo(() => {
     const parsed = parseWorkQuery(query);
-    const filtered = workItems.filter((item) => matchesWorkQuery(item, parsed));
+    const filtered = allItems.filter((item) => matchesWorkQuery(item, parsed));
     return [...filtered].sort(compareWorkItems);
-  }, [query, workItems]);
-  const visibleMyPrs = useMemo(() => filterPullRequestsForMyWorkTab(authoredMyPrs, query), [authoredMyPrs, query]);
+  }, [allItems, query]);
+  const visibleMyPrs = useMemo(() => filterMyPullRequests(myPrs, login, query), [login, myPrs, query]);
+  const laneCounts = useMemo(() => counts.map((items) => items.length), [counts]);
   const workPageRows = useMemo(() => paginateItems(visible, page, ENTITY_PAGE_SIZE), [page, visible]);
   const prPageRows = useMemo(() => paginateItems(visibleMyPrs, page, ENTITY_PAGE_SIZE), [page, visibleMyPrs]);
   const groupedPageRows = useMemo(() => groupWorkRows(workPageRows), [workPageRows]);
-  const loading = activeTab === "my_prs" ? myPrsFetching && authoredMyPrs.length === 0 : isFetching && workItems.length === 0;
-  const needsMeCount = withoutAuthoredPrAttentionItems(counts[0] ?? [], authoredMyPrKeys).length;
+  const loading = activeTab === "my_prs" ? myPrsFetching && authoredMyPrs.length === 0 : isFetching && allItems.length === 0;
+  const needsMeCount = laneCounts[0] ?? 0;
   const laneEmptyCopy = myWorkLaneCopy[lane];
   const canCollapseGroups = query.trim() === "";
   const activeItemCount = activeTab === "my_prs" ? visibleMyPrs.length : visible.length;
@@ -143,13 +143,13 @@ export function MyWorkView({
   useEffect(() => setPage(1), [activeTab, auth.status, authAccountKey, lane, query]);
   useEffect(() => {
     if (userSelectedTab || auth.status !== "connected" || myPrsFetching) return;
-    if (authoredMyPrs.length > 0) {
+    if (activeAuthoredMyPrs.length > 0) {
       setActiveTab("my_prs");
       return;
     }
     setLane("needs_me");
     setActiveTab("needs_me");
-  }, [auth.status, authoredMyPrs.length, myPrsFetching, setLane, userSelectedTab]);
+  }, [activeAuthoredMyPrs.length, auth.status, myPrsFetching, setLane, userSelectedTab]);
   useEffect(() => {
     if (activeTab !== "my_prs") setActiveTab(lane);
   }, [activeTab, lane]);
@@ -187,8 +187,8 @@ export function MyWorkView({
               }`}
             >
               My PRs
-              {authoredMyPrs.length ? (
-                <span className="ml-1 font-mono text-[12px] text-neutral-600">{compactCount(authoredMyPrs.length)}</span>
+              {activeAuthoredMyPrs.length ? (
+                <span className="ml-1 font-mono text-[12px] text-neutral-600">{compactCount(activeAuthoredMyPrs.length)}</span>
               ) : null}
             </button>
             {myWorkLanes.map((item, index) => (
@@ -207,15 +207,25 @@ export function MyWorkView({
                 }`}
               >
                 {item.label}
-                {withoutAuthoredPrAttentionItems(counts[index] ?? [], authoredMyPrKeys).length ? (
-                  <span className="ml-1 font-mono text-[12px] text-neutral-600">
-                    {compactCount(withoutAuthoredPrAttentionItems(counts[index] ?? [], authoredMyPrKeys).length)}
-                  </span>
+                {laneCounts[index] ? (
+                  <span className="ml-1 font-mono text-[12px] text-neutral-600">{compactCount(laneCounts[index] ?? 0)}</span>
                 ) : null}
               </button>
             ))}
           </div>
-          <MyWorkSearchInput value={query} onChange={setQuery} items={activeTab === "my_prs" ? [] : workItems} />
+          {activeTab === "my_prs" ? (
+            <SimpleSearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search My PRs"
+              ariaLabel="Search My PRs"
+              items={authoredMyPrs}
+              login={login}
+              kinds={["pr"]}
+            />
+          ) : (
+            <MyWorkSearchInput value={query} onChange={setQuery} items={allItems} />
+          )}
         </div>
 
         <div className="overflow-hidden rounded-lg border border-white/[0.08] bg-[#050506] shadow-[0_1px_0_rgba(255,255,255,0.04),0_18px_44px_rgba(0,0,0,0.22)]">
@@ -258,13 +268,13 @@ export function MyWorkView({
               {auth.status !== "connected" && visible.length === 0 && (
                 <div className="px-4 py-8 text-center text-neutral-500 text-sm">Connect GitHub to build your work queue.</div>
               )}
-              {auth.status === "connected" && workItems.length === 0 && !loading && (
+              {auth.status === "connected" && allItems.length === 0 && !loading && (
                 <div className="px-4 py-8 text-center text-neutral-500 text-sm">
                   <div className="font-medium text-neutral-300">{laneEmptyCopy.emptyTitle}</div>
                   <div className="mt-1 text-xs">{laneEmptyCopy.emptyDetail}</div>
                 </div>
               )}
-              {workItems.length > 0 && visible.length === 0 && (
+              {allItems.length > 0 && visible.length === 0 && (
                 <div className="px-4 py-8 text-center text-neutral-500 text-sm">No work items match this search.</div>
               )}
               {groupedPageRows.map(({ group, rows }) => (
@@ -321,108 +331,6 @@ export function MyWorkView({
       </div>
     </div>
   );
-}
-
-function MyPullRequestRow({ pr, onClick }: { pr: PullRequestSummary; onClick: () => void }) {
-  const status = myPullRequestStatus(pr);
-  return (
-    <div className="group grid min-h-[76px] grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 border-b border-white/[0.06] px-4 py-3.5 text-left text-sm transition-colors last:border-b-0 hover:bg-white/[0.025] md:grid-cols-[auto_minmax(0,1fr)_minmax(190px,auto)]">
-      <WorkItemTypeIcon kind="pr" state={pr.merged ? "merged" : pr.state} />
-      <div className="min-w-0 overflow-hidden">
-        <button type="button" onClick={onClick} className="block w-full min-w-0 text-left">
-          <div className="truncate text-[14px] font-medium leading-5 text-neutral-200 transition-colors group-hover:text-neutral-50">
-            <span className="mr-2.5 font-mono font-normal text-neutral-500">#{pr.number}</span>
-            {pr.title}
-          </div>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-5 text-neutral-500">
-            {pr.repoFullName && <span className="max-w-[240px] truncate font-medium text-neutral-500">{pr.repoFullName}</span>}
-            {pr.repoFullName && (
-              <span className="text-neutral-700" aria-hidden="true">
-                ·
-              </span>
-            )}
-            <span className="font-medium text-neutral-400">{status?.label ?? "Open"}</span>
-            <span className="text-neutral-700" aria-hidden="true">
-              ·
-            </span>
-            <span>{pr.updatedAt ? formatRelative(pr.updatedAt) : "Update unknown"}</span>
-          </div>
-          <div className="mt-0.5 truncate text-[12px] leading-5 text-neutral-600">{myPullRequestPreview(pr)}</div>
-          <div className="truncate text-[12px] leading-5 text-neutral-700">{myPullRequestDetail(pr)}</div>
-        </button>
-      </div>
-      <div className="col-start-2 flex min-w-0 flex-wrap items-center gap-1 text-xs md:col-start-auto md:justify-end">
-        <button
-          type="button"
-          onClick={onClick}
-          className="rounded-md px-2 py-1 text-[12px] font-medium text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-600"
-        >
-          Open
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function myPullRequestPreview(pr: PullRequestSummary): string {
-  const stats = [
-    pr.checkState === "failing"
-      ? "Checks failing"
-      : pr.checkState === "pending"
-        ? "Checks pending"
-        : pr.checkState === "passing"
-          ? "Checks passing"
-          : null,
-    pr.reviewState ? reviewStateLabel(pr.reviewState) : null,
-    pr.changedFiles != null ? `${compactCount(pr.changedFiles)} changed files` : null
-  ].filter((item): item is string => Boolean(item));
-  return stats.length > 0 ? stats.join(" · ") : "No review or check signal cached";
-}
-
-function myPullRequestDetail(pr: PullRequestSummary): string {
-  const parts = [
-    pr.headBranch && pr.baseBranch ? `${pr.headBranch} into ${pr.baseBranch}` : pr.headBranch || pr.baseBranch,
-    pr.commentsCount != null || pr.reviewCommentsCount != null
-      ? `${compactCount((pr.commentsCount ?? 0) + (pr.reviewCommentsCount ?? 0))} comments`
-      : null
-  ].filter((item): item is string => Boolean(item));
-  return parts.length > 0 ? parts.join(" · ") : "Authored by you";
-}
-
-function reviewStateLabel(value: string): string {
-  if (value === "changes requested") return "Changes requested";
-  if (value === "approved") return "Approved";
-  if (value === "reviewed") return "Reviewed";
-  return value;
-}
-
-function myPullRequestStatus(pr: PullRequestSummary): { label: string; className: string } | null {
-  if (pr.merged) return { label: "Merged", className: "bg-purple-500/10 text-purple-300" };
-  if (pr.state === "closed") return { label: "Closed", className: "bg-red-500/10 text-red-300" };
-  if (pr.isDraft) return { label: "Draft", className: "bg-white/[0.06] text-neutral-400" };
-  if (pr.checkState === "failing") return { label: "Checks failing", className: "bg-red-500/10 text-red-300" };
-  if (pr.checkState === "pending") return { label: "Checks pending", className: "bg-amber-500/10 text-amber-300" };
-  return null;
-}
-
-function withoutAuthoredPrAttentionItems(items: AttentionItem[], authoredPrKeys: Set<string>): AttentionItem[] {
-  return items.filter((item) => !isAuthoredPrAttentionItem(item, authoredPrKeys));
-}
-
-function isAuthoredPrAttentionItem(item: AttentionItem, authoredPrKeys: Set<string>): boolean {
-  return item.entityType === "pull_request" && item.number != null && authoredPrKeys.has(`${item.repoId}:${item.number}`);
-}
-
-function filterPullRequestsForMyWorkTab(prs: PullRequestSummary[], query: string): PullRequestSummary[] {
-  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return prs;
-  return prs.filter((pr) => {
-    const haystack = [pr.title, pr.repoFullName, pr.number, pr.headBranch, pr.baseBranch, pr.state, pr.isDraft ? "draft" : null]
-      .filter((value) => value != null)
-      .join(" ")
-      .toLowerCase();
-    return terms.every((term) => haystack.includes(term));
-  });
 }
 
 function AttentionWorkRow({

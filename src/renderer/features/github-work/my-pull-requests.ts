@@ -1,11 +1,12 @@
 import type { PullRequestSummary } from "../../../shared/domain/github-work";
+import { filterPullRequests, queryWithDefaultOpen } from "./entity-query";
 
-export function filterMyPullRequests(pullRequests: PullRequestSummary[], login?: string): PullRequestSummary[] {
+export function authoredMyPullRequests(pullRequests: PullRequestSummary[], login?: string): PullRequestSummary[] {
   return pullRequests.filter((pr) => sameLogin(pr.authorLogin, login) && !pr.merged).sort(byUpdatedDesc);
 }
 
-export function myPullRequestKey(pr: Pick<PullRequestSummary, "repoId" | "number">): string {
-  return `${pr.repoId}:${pr.number}`;
+export function filterMyPullRequests(pullRequests: PullRequestSummary[], login: string | undefined, query: string): PullRequestSummary[] {
+  return filterPullRequests(authoredMyPullRequests(pullRequests, login), queryWithDefaultOpen(query), login);
 }
 
 export function myPullRequestStatusCounts(pullRequests: PullRequestSummary[]): {
